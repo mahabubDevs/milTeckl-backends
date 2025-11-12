@@ -81,6 +81,10 @@ const getPackageFromDB = async(paymentType?: string): Promise<IPackage[]> => {
     return Package.find(query);
 };
 
+const getSinglePackageFromDB = async (id: string): Promise<IPackage | null> => {
+    return Package.findById(id).where({ status: "Active" });
+};
+
 const getPackageDetailsFromDB = async(id: string): Promise<IPackage | null> => {
     if(!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid ID");
     return Package.findById(id);
@@ -100,5 +104,6 @@ export const PackageService = {
     updatePackageToDB,
     getPackageFromDB,
     getPackageDetailsFromDB,
-    deletePackageToDB
+    deletePackageToDB,
+    getSinglePackageFromDB
 };

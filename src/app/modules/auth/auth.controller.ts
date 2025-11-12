@@ -153,7 +153,7 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
 
 const deleteOwnUser = async (req: Request, res: Response) => {
   // ✅ Step 1: Get logged-in user ID from token
-  const userId = req.user?._id;
+  const userId = req.user && (req.user as any)._id;
   console.log("Logged-in userId from token:", userId);
 
 

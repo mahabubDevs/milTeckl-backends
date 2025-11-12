@@ -14,7 +14,7 @@ const createUserZodSchema = z.object({
         firstName: z.string({ required_error: 'First name is required' }),
         // lastName: z.string({ required_error: 'Last name is required' }),
         country: z.string({ required_error: 'countrey'}).optional(),
-        phone : z.string({ required_error: 'Phone number is required' }),
+        phone : z.string({ required_error: 'Phone number is required' }).min(7, 'Phone number must be at least 7 characters').max(15, 'Phone number must be at most 15 characters') ,
         email: z.string({ required_error: 'Email is required' }).email({ message: 'Invalid email address' }),
         password: z.string({ required_error: 'Password is required' }),
         role: z.enum(["MERCENT", "USER"]).optional().transform(val => val?.toLowerCase()),

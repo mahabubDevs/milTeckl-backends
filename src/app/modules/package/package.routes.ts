@@ -18,7 +18,8 @@ router.route("/")
     .get(PackageController.getPackage);
 
 router.route("/:id")
-    .patch(authWithPageAccess('package'), PackageController.updatePackage)
-    .delete(authWithPageAccess('package'), PackageController.deletePackage);
+    .get(auth(), PackageController.getSinglePackage)
+    .patch(auth(), PackageController.updatePackage)
+    .delete(auth(), PackageController.deletePackage);
 
 export const PackageRoutes = router;

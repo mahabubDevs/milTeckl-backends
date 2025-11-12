@@ -7,7 +7,7 @@ import { UserManagementRoutes } from '../modules/userManagement/usermanagement.r
 // import { ChatRoutes } from '../modules/chat/chat.route';
 // import { GameRoutes } from '../modules/game/game.routes';
 // import { EventRoutes } from '../modules/event/event.route';
-import { PromoRoutes } from '../modules/promoCode/promo.routes';
+import { PromoRoutes } from '../modules/promotionAdmin/promotionAdmin.routes';
 import { RuleRoutes } from '../modules/rule/rule.route';
 // import { ShopRoutes } from '../modules/shopManagement/shop.routes';
 // import { AurashopRoute } from '../modules/shopAuraSubscription/aurashop.routes';
@@ -15,6 +15,8 @@ import { RuleRoutes } from '../modules/rule/rule.route';
 import { DashboardRoutes } from '../modules/dashbordOverview/dashboard.routes';
 import { SubscriptionRoutes } from '../modules/subscription/subscription.routes';
 import { PackageRoutes } from '../modules/package/package.routes';
+import { PromoMercentRoutes } from '../modules/promotionMercent/promotionMercent.routes';
+import { TierRoutes } from '../modules/point&TierSystem/tier.route';
 // import { AuraBundleRoute } from '../modules/shopAuroBundle/auraBundle.routes';
 // import { BuyCall } from '../modules/buy/buy.routes';
 // import { CallBundleRoute } from '../modules/shopCallBundle/callBundle.routes';
@@ -39,6 +41,8 @@ const apiRoutes = [
     { path: "/subscription", route: SubscriptionRoutes },
     {path: "/rule", route:RuleRoutes},
     {path: "/promo", route:PromoRoutes},
+    {path: "/promomercent", route:PromoMercentRoutes},
+    {path: "/tier", route:TierRoutes},
     {path: "/package", route:PackageRoutes},
     // {path: "/chat", route:ChatRoutes},
     // {path: "/game", route:GameRoutes},

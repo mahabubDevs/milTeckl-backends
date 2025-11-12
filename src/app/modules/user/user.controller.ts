@@ -14,12 +14,14 @@ const createUser = catchAsync( async (req: Request, res: Response, next: NextFun
 };
 
     const result = await UserService.createUserToDB(userData);
+    console.log("Created User:", result);
 
     sendResponse(res, {
-        success: true,
-        statusCode: StatusCodes.OK,
-        message: `Enter the verification code sent to your phone. please verify your phone ${result.phone}  `,
-    })
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: `Enter the verification code sent to your phone. please verify your phone ${result.phone}`,
+});
+
 });
 
 // register admin

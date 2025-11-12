@@ -76,7 +76,27 @@ const fileUploadHandler = () => {
     { name: 'image', maxCount: 3 },
     { name: 'excel', maxCount: 1 },
   ]);
-  return upload;
+
+  // Middleware: convert absolute paths to relative paths
+  const middleware = (req: Request, res: any, next: any) => {
+    upload(req, res, (err: any) => {
+      if (err) return next(err);
+
+      if (req.files) {
+        const files = req.files as { [key: string]: Express.Multer.File[] };
+        Object.keys(files).forEach((key) => {
+          files[key].forEach((file) => {
+            // Replace absolute path with relative path
+            file.path = file.path.replace(process.cwd(), '').split('\\').join('/');
+          });
+        });
+      }
+
+      next();
+    });
+  };
+
+  return middleware;
 };
 
 export default fileUploadHandler;

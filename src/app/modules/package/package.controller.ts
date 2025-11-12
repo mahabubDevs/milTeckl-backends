@@ -56,6 +56,27 @@ const getPackage = catchAsync(async(req: Request, res: Response) => {
     });
 });
 
+const getSinglePackage = catchAsync(async (req: Request, res: Response) => {
+    const packageId = req.params.id;
+    const pkg = await PackageService.getSinglePackageFromDB(packageId);
+
+    if (!pkg) {
+        return sendResponse(res, {
+            statusCode: StatusCodes.NOT_FOUND,
+            success: false,
+            message: "Package not found",
+        });
+    }
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Package retrieved successfully",
+        data: pkg,
+    });
+});
+
+
 const packageDetails = catchAsync(async(req: Request, res: Response) => {
     const result = await PackageService.getPackageDetailsFromDB(req.params.id);
 
@@ -82,6 +103,7 @@ export const PackageController = {
     createPackage,
     updatePackage,
     getPackage,
+    getSinglePackage,
     packageDetails,
     deletePackage
 };
