@@ -15,7 +15,19 @@ const createSalesRepData = catchAsync(async (req: Request, res: Response) => {
     message: "Sales repo data created successfully",
   });
 });
+const getSalesRepData = catchAsync(async (req: Request, res: Response) => {
+  const result = await SalesRepService.getSalesRepData(req.query);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Sales repo data retrieved successfully",
+    data: result.salesRep,
+    pagination: result.pagination,
+  });
+});
 
 export const SalesRepController = {
   createSalesRepData,
+  getSalesRepData,
 };
