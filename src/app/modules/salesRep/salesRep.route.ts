@@ -8,13 +8,22 @@ import validateRequest from "../../middlewares/validateRequest";
 
 const router = express.Router();
 
-router.post("/", auth(USER_ROLES.USER), SalesRepController.createSalesRepData);
+router.post(
+  "/",
+  auth(USER_ROLES.USER),
+  validateRequest(SalesRepValidation.createSalesRepDataZodSchema),
+  SalesRepController.createSalesRepData
+);
 router.get(
   "/",
   auth(USER_ROLES.SUPER_ADMIN),
   SalesRepController.getSalesRepData
 );
-router.patch("/acknowledge/users/:Id", auth(USER_ROLES.SUPER_ADMIN));
+router.patch(
+  "/acknowledge/users/:id",
+  auth(USER_ROLES.SUPER_ADMIN),
+  SalesRepController.updateUserAcknowledgeStatus
+);
 
 router.post(
   "/token/users/:id",

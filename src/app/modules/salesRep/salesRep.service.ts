@@ -9,16 +9,18 @@ import { generateCashToken } from "../../../util/generateCashToken";
 import { ISubscription } from "../subscription/subscription.interface";
 import { Types } from "mongoose";
 import { Subscription } from "../subscription/subscription.model";
+import { Package } from "../package/package.model";
 
-const createSalesRepData = async (user: JwtPayload) => {
+const createSalesRepData = async (user: JwtPayload, packageId: string) => {
   await SalesRep.create({
-    customerId: user.id,
+    customerId: user._id,
+    packageId,
   });
 };
 const getSalesRepData = async (query: Record<string, unknown>) => {
   const baseQuery = SalesRep.find().populate(
     "customerId",
-    "firstName lastName email phone  status"
+    "firstName lastName email phone  status lastStatusChanged"
   );
 
   const salesRepQuery = new QueryBuilder(baseQuery, query)
@@ -39,39 +41,58 @@ const getSalesRepData = async (query: Record<string, unknown>) => {
 };
 
 const updateUserAcknowledgeStatus = async (userId: string) => {
-  await SalesRep.findOneAndUpdate(
-    { customerId: userId },
+  const result = await SalesRep.findOneAndUpdate(
+    { customerId: new Types.ObjectId(userId) },
     {
       acknowledged: true,
       acknowledgeDate: new Date(),
     },
-    { runValidators: true }
+    { new: true, runValidators: true }
   );
+  if (!result) {
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      "No sales rep found for the given user"
+    );
+  }
 };
 const generateToken = async (userId: string) => {
   const user = await User.findById(userId).select("status");
+
   if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User not found!");
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
   }
+
   if (user.status !== USER_STATUS.ACTIVE) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User not Active");
+    throw new ApiError(StatusCodes.FORBIDDEN, "User is not active");
   }
+
   const token = generateCashToken();
 
-  await SalesRep.findOneAndUpdate(
-    { customerId: userId },
+  const result = await SalesRep.findOneAndUpdate(
+    { customerId: new Types.ObjectId(userId) },
     {
       token,
       tokenGenerateDate: new Date(),
     },
-    { runValidators: true }
+    { new: true, runValidators: true }
   );
+
+  if (!result) {
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      "No sales rep record found for this user"
+    );
+  }
 };
 const validateToken = async (userId: string, token: string) => {
-  const result = await SalesRep.findOne({ customerId: userId });
+  const result = await SalesRep.findOne({ customerId: userId, token });
 
   if (!result) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid request");
+  }
+  if (result.paymentStatus === "paid") {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Already Validated");
   }
   if (result.token !== token) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid Token");
@@ -85,6 +106,26 @@ const validateToken = async (userId: string, token: string) => {
     { subscription: "active" },
     { new: true }
   );
+  const existingPackage = await Package.findById(result.packageId);
+
+  // this is for test purpose
+  const subscriptionData: Partial<ISubscription> = {
+    user: new Types.ObjectId(userId),
+    package: new Types.ObjectId(result.packageId),
+    price: existingPackage?.price,
+    customerId: userId,
+    subscriptionId: new Date().toISOString(),
+    remaining: 0,
+    currentPeriodStart: new Date().toISOString(),
+    currentPeriodEnd: (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 30);
+      return d.toISOString();
+    })(),
+    trxId: "N/A",
+    status: "active",
+  };
+  await Subscription.create({ ...subscriptionData });
 };
 
 export const SalesRepService = {

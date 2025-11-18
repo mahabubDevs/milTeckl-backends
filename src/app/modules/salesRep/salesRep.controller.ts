@@ -7,7 +7,7 @@ import { JwtPayload } from "jsonwebtoken";
 
 const createSalesRepData = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as JwtPayload;
-  await SalesRepService.createSalesRepData(user);
+  await SalesRepService.createSalesRepData(user, req.body.packageId);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -39,7 +39,7 @@ const updateUserAcknowledgeStatus = catchAsync(
   }
 );
 const generateToken = catchAsync(async (req: Request, res: Response) => {
-  await SalesRepService.updateUserAcknowledgeStatus(req.params.id);
+  await SalesRepService.generateToken(req.params.id);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -50,7 +50,7 @@ const generateToken = catchAsync(async (req: Request, res: Response) => {
 
 const validateToken = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as JwtPayload;
-  await SalesRepService.validateToken(user.id, req.body.token);
+  await SalesRepService.validateToken(user._id, req.body.token);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

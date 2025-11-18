@@ -8,6 +8,12 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       ref: "User",
       required: true,
     },
+    packageId: {
+      type: Schema.Types.ObjectId,
+      ref: "Package",
+      required: true,
+    },
+
     acknowledged: {
       type: Boolean,
       default: false,
