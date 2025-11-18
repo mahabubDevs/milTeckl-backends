@@ -8,15 +8,35 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       ref: "User",
       required: true,
     },
+    packageId: {
+      type: Schema.Types.ObjectId,
+      ref: "Package",
+      required: true,
+    },
+
     acknowledged: {
       type: Boolean,
       default: false,
     },
+    acknowledgeDate: {
+      type: Date,
+    },
     token: {
       type: String,
+    },
+    tokenGenerateDate: {
+      type: Date,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["paid", "unpaid", "expired"],
+      default: "unpaid",
     },
   },
   { timestamps: true }
 );
 
-export const Rule = model<ISalesRep, SalesRepModel>("SelesRep", salesRepSchema);
+export const SalesRep = model<ISalesRep, SalesRepModel>(
+  "SalesRep",
+  salesRepSchema
+);
