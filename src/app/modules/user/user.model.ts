@@ -194,6 +194,10 @@ userSchema.statics.isExistUserByEmail = async (email: string) => {
   const isExist = await User.findOne({ email });
   return isExist;
 };
+userSchema.statics.isExistUserByPhone = async (phone: string) => {
+  const isExist = await User.findOne({ phone });
+  return isExist;
+};
 
 //account check
 userSchema.statics.isAccountCreated = async (id: string) => {

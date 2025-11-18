@@ -127,6 +127,7 @@ export interface IUser {
 export type UserModal = {
   isExistUserById(id: string): any;
   isExistUserByEmail(email: string): any;
+  isExistUserByPhone(phone: string): any;
   isAccountCreated(id: string): any;
   isMatchPassword(password: string, hashPassword: string): boolean;
 } & Model<IUser>;

@@ -1,6 +1,6 @@
 import { USER_ROLES } from "../../../enums/user";
 import { IUser } from "./user.interface";
-import { JwtPayload } from 'jsonwebtoken';
+import { JwtPayload } from "jsonwebtoken";
 import { User } from "./user.model";
 import { StatusCodes } from "http-status-codes";
 import ApiError from "../../../errors/ApiErrors";
@@ -20,25 +20,34 @@ interface IPackageWithId extends IPackage {
 }
 
 const createAdminToDB = async (payload: any): Promise<IUser> => {
+  // check admin is exist or not;
+  const isExistAdmin = await User.findOne({ email: payload.email });
+  if (isExistAdmin) {
+    throw new ApiError(StatusCodes.CONFLICT, "This Email already taken");
+  }
 
-    // check admin is exist or not;
-    const isExistAdmin = await User.findOne({ email: payload.email })
-    if (isExistAdmin) {
-        throw new ApiError(StatusCodes.CONFLICT, "This Email already taken");
-    }
+  // create admin to db
+  const createAdmin = await User.create(payload);
+  if (!createAdmin) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create Admin");
+  } else {
+    await User.findByIdAndUpdate(
+      { _id: createAdmin?._id },
+      { verified: true },
+      { new: true }
+    );
+  }
 
-    // create admin to db
-    const createAdmin = await User.create(payload);
-    if (!createAdmin) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, 'Failed to create Admin');
-    } else {
-        await User.findByIdAndUpdate({ _id: createAdmin?._id }, { verified: true }, { new: true });
-    }
-
-    return createAdmin;
-}
+  return createAdmin;
+};
 
 const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
+  const isExitByEmail = await User.isExistUserByEmail(payload.email as string);
+  const isExitByPhone = await User.isExistUserByPhone(payload.phone as string);
+
+  if (isExitByEmail || isExitByPhone) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User Already Exist");
+  }
   const createUser = await User.create(payload);
   if (!createUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
@@ -57,7 +66,7 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
     },
   });
 
-  console.log("Generated OTP for user:", otp)  // Send OTP to user's phone
+  console.log("Generated OTP for user:", otp); // Send OTP to user's phone
   // if (createUser.phoneNumber) {
   //   // sendOtp expects string arguments, ensure OTP is converted to string
   //   await sendOtp(createUser.phoneNumber, String(otp));
@@ -65,33 +74,31 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
   //   console.warn("⚠️ No phone number found for user:", createUser._id);
   // }
 
-
-  return createUser ;
+  return createUser;
 };
 
+const getUserProfileFromDB = async (
+  user: JwtPayload
+): Promise<Partial<IUser> & { totalPigeons: number; subscriptions: any[] }> => {
+  const { _id } = user;
 
+  // 1️⃣ Check if user exists
+  const isExistUser: any = await User.isExistUserById(_id);
+  if (!isExistUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
 
-const getUserProfileFromDB = async (user: JwtPayload): Promise<Partial<IUser> & { totalPigeons: number, subscriptions: any[] }> => {
-    const { _id } = user;
+  // 2️⃣ Count total pigeons (pages array)
 
-    // 1️⃣ Check if user exists
-    const isExistUser: any = await User.isExistUserById(_id);
-    if (!isExistUser) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
-    }
-
-    // 2️⃣ Count total pigeons (pages array)
-
-
-
-
-   // populate er por type define kora holo
-const subscriptions = await Subscription.find({ user: _id }).populate<{ package: IPackageWithId | null }>({
+  // populate er por type define kora holo
+  const subscriptions = await Subscription.find({ user: _id }).populate<{
+    package: IPackageWithId | null;
+  }>({
     path: "package",
     select: "title price duration",
-});
+  });
 
-const formattedSubscriptions = subscriptions.map(sub => ({
+  const formattedSubscriptions = subscriptions.map((sub) => ({
     subscriptionId: sub._id,
     packageId: sub.package?._id || null,
     packageTitle: sub.package?.title || "Deleted Package",
@@ -101,44 +108,44 @@ const formattedSubscriptions = subscriptions.map(sub => ({
     endDate: sub.currentPeriodEnd,
     status: sub.status,
     trxId: sub.trxId,
-    subscriptionStripeId: sub.subscriptionId
-}));
-// 5️⃣ Total subscriptions
+    subscriptionStripeId: sub.subscriptionId,
+  }));
+  // 5️⃣ Total subscriptions
   const totalSubscriptions = subscriptions.length;
-    // 5️⃣ Return combined profile + subscriptions + totalPigeons
-    return {
-        ...isExistUser.toObject(),
-     
-        subscriptions: formattedSubscriptions,
-        totalSubscriptions
-    };
+  // 5️⃣ Return combined profile + subscriptions + totalPigeons
+  return {
+    ...isExistUser.toObject(),
+
+    subscriptions: formattedSubscriptions,
+    totalSubscriptions,
+  };
 };
 
+const updateProfileToDB = async (
+  user: JwtPayload,
+  payload: Partial<IUser>
+): Promise<Partial<IUser | null>> => {
+  const { _id } = user;
+  const isExistUser = await User.isExistUserById(_id);
+  if (!isExistUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
 
-const updateProfileToDB = async (user: JwtPayload, payload: Partial<IUser>): Promise<Partial<IUser | null>> => {
-    const { _id } = user;
-    const isExistUser = await User.isExistUserById(_id);
-    if (!isExistUser) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
-    }
+  //unlink file here
+  if (payload.profile) {
+    unlinkFile(isExistUser.profile);
+  }
 
-    //unlink file here
-    if (payload.profile) {
-        unlinkFile(isExistUser.profile);
-    }
-
-    const updateDoc = await User.findOneAndUpdate(
-        { _id: _id },
-        payload,
-        { new: true }
-    );
-    console.log("updateDoc", updateDoc);
-    return updateDoc;
+  const updateDoc = await User.findOneAndUpdate({ _id: _id }, payload, {
+    new: true,
+  });
+  console.log("updateDoc", updateDoc);
+  return updateDoc;
 };
 
- const getUserOnlineStatusFromDB = async (userId: string) => {
+const getUserOnlineStatusFromDB = async (userId: string) => {
   const user = await User.findById(userId);
-  if (!user) throw new Error('User not found');
+  if (!user) throw new Error("User not found");
 
   const now = new Date();
   const diffMinutes = (now.getTime() - user.lastActive.getTime()) / 1000 / 60;
@@ -147,18 +154,17 @@ const updateProfileToDB = async (user: JwtPayload, payload: Partial<IUser>): Pro
 
   return {
     userId: user._id.toString(),
-    name: user.firstName + ' ' + user.lastName,
+    name: user.firstName + " " + user.lastName,
     isOnline,
     lastActive: user.lastActive,
     lastActiveMinutesAgo: Math.floor(diffMinutes),
   };
 };
 
-
 export const UserService = {
-    createUserToDB,
-    getUserProfileFromDB,
-    updateProfileToDB,
-    createAdminToDB,
-    getUserOnlineStatusFromDB
+  createUserToDB,
+  getUserProfileFromDB,
+  updateProfileToDB,
+  createAdminToDB,
+  getUserOnlineStatusFromDB,
 };
