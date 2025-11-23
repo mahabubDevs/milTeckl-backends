@@ -13,8 +13,9 @@ import { NotificationService } from "../notification/notification.service";
 import { last } from "pdf-lib";
 import { Subscription } from "../subscription/subscription.model";
 import { IPackage } from "../shopAuraSubscription/aurashop.interface";
-import { sendOtp } from "../../../shared/twilioService";
+
 import { createUniqueReferralId } from "../../../util/generateRefferalId";
+import { sendOtp } from "../../../config/veevoTechOtp";
 
 interface IPackageWithId extends IPackage {
   _id: string;
@@ -47,12 +48,15 @@ const createAdminToDB = async (payload: any): Promise<IUser> => {
 };
 
 const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
+  // 1️⃣ Check if user exists
   const isExitByEmail = await User.isExistUserByEmail(payload.email as string);
   const isExitByPhone = await User.isExistUserByPhone(payload.phone as string);
 
   if (isExitByEmail || isExitByPhone) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User Already Exist");
   }
+
+  // 2️⃣ Create user data
   const referenceId = await createUniqueReferralId();
   const userData = {
     ...payload,
@@ -62,35 +66,41 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<IUser> => {
         ? USER_STATUS.INACTIVE
         : USER_STATUS.ACTIVE,
   };
+
   const createUser = await User.create(userData);
   if (!createUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
   }
 
-  // Generate OTP
+  // 3️⃣ Generate OTP
   const otp = generateOTP();
 
-  // Save OTP to DB
+  // 4️⃣ Save OTP to DB
   await User.findByIdAndUpdate(createUser._id, {
     $set: {
       "authentication.phoneOTP": {
         code: otp,
-        expireAt: new Date(Date.now() + 3 * 60000), // 3 minutes validity
+        expireAt: new Date(Date.now() + 3 * 60000), // 3 min
       },
     },
   });
 
-  console.log("Generated OTP for user:", otp); // Send OTP to user's phone
-  // if (createUser.phoneNumber) {
-  //   // sendOtp expects string arguments, ensure OTP is converted to string
-  //   await sendOtp(createUser.phoneNumber, String(otp));
-  // } else {
-  //   console.warn("⚠️ No phone number found for user:", createUser._id);
-  // }
+  console.log("Generated OTP for user:", otp);
+
+  // 5️⃣ Send OTP via VeevoTech API
+  if (createUser.phone) {
+    try {
+      await sendOtp(createUser.phone, otp.toString());
+      console.log(`OTP sent to phone: ${createUser.phone}`);
+    } catch (error) {
+      console.error("Failed to send OTP via VeevoTech:", error);
+    }
+  } else {
+    console.warn("⚠️ No phone number found for user:", createUser._id);
+  }
 
   return createUser;
 };
-
 const getUserProfileFromDB = async (
   user: JwtPayload
 ): Promise<Partial<IUser> & { totalPigeons: number; subscriptions: any[] }> => {

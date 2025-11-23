@@ -3,35 +3,28 @@ import { DashboardController } from "./dashboard.controller";
 
 import { USER_ROLES } from "../../../enums/user";
 import auth from "../../middlewares/auth";
-
+import validateRequest from "../../middlewares/validateRequest";
+import { DashboardValidation } from "./dasboard.validation";
 
 const router = Router();
 
-// ✅ Age distribution route
 router.get(
-  "/age-distribution",
+  "/total-revenue",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
-  DashboardController.getAgeDistribution
+  validateRequest(DashboardValidation.totalRevenueZodSchema),
+  DashboardController.getTotalRevenue
 );
-
 router.get(
-  "/ethnicity-distribution",
+  "/admin-statistics",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
-  DashboardController.getEthnicityDistribution
+  validateRequest(DashboardValidation.getStatisticsForAdminDashboardZodSchema),
+  DashboardController.getStatisticsForAdminDashboard
 );
-
-// Gender distribution
 router.get(
-  "/gender-distribution",
+  "/yearly-revenue",
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
-  DashboardController.getGenderDistribution
-);
-
-// Monthly signups
-router.get(
-  "/monthly-signups",
-  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
-  DashboardController.getMonthlySignups
+  validateRequest(DashboardValidation.getYearlyRevenueZodSchema),
+  DashboardController.getYearlyRevenue
 );
 
 export const DashboardRoutes = router;
