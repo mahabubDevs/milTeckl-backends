@@ -6,40 +6,40 @@ import { DashboardService } from "./dashboard.service";
 
 // Dashboard Stats
 
-
-// Age Distribution
-const getAgeDistribution = catchAsync(async (req: Request, res: Response) => {
-  const ageData = await DashboardService.getAgeDistribution();
+const getTotalRevenue = catchAsync(async (req: Request, res: Response) => {
+  const result = await DashboardService.getTotalRevenue(req.query);
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: "Age distribution fetched successfully",
-    data: ageData,
+    message: "Total revenue fetched successfully",
+    data: result,
   });
 });
 
-
-const getEthnicityDistribution = catchAsync(async (req: Request, res: Response) => {
-  const data = await DashboardService.getEthnicityDistribution();
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Ethnicity distribution fetched successfully",
-    data,
-  });
-});
-
+const getEthnicityDistribution = catchAsync(
+  async (req: Request, res: Response) => {
+    const data = await DashboardService.getEthnicityDistribution();
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Ethnicity distribution fetched successfully",
+      data,
+    });
+  }
+);
 
 // Gender distribution
-const getGenderDistribution = catchAsync(async (req: Request, res: Response) => {
-  const data = await DashboardService.getGenderDistribution();
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Gender distribution fetched successfully",
-    data,
-  });
-});
+const getGenderDistribution = catchAsync(
+  async (req: Request, res: Response) => {
+    const data = await DashboardService.getGenderDistribution();
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Gender distribution fetched successfully",
+      data,
+    });
+  }
+);
 
 // Monthly signups
 const getMonthlySignups = catchAsync(async (req: Request, res: Response) => {
@@ -53,9 +53,8 @@ const getMonthlySignups = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const DashboardController = {
-
-  getAgeDistribution,
+  getTotalRevenue,
   getEthnicityDistribution,
   getGenderDistribution,
-  getMonthlySignups
+  getMonthlySignups,
 };

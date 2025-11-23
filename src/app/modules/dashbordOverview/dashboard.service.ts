@@ -1,41 +1,94 @@
+import { Query } from "mongoose";
+import { Subscription } from "../subscription/subscription.model";
 import { User } from "../user/user.model";
 
-
-
-
-// ✅ Age distribution
-const getAgeDistribution = async () => {
-  const rawData = await User.aggregate([
+const getTotalRevenue = async (query: any) => {
+  const startDate = new Date(query.start);
+  const endDate = new Date(query.end);
+  const revenueData = await Subscription.aggregate([
     {
-      $bucket: {
-        groupBy: "$age",
-        boundaries: [18, 25, 35, 45,55, 200],
-        default: "Unknown",
-        output: { count: { $sum: 1 } },
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate },
+      },
+    },
+    {
+      $group: {
+        _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+        revenue: { $sum: "$price" },
+      },
+    },
+    { $sort: { "_id.year": 1, "_id.month": 1 } },
+    {
+      $project: {
+        _id: 0,
+        month: {
+          $concat: [
+            {
+              $arrayElemAt: [
+                [
+                  "Jan",
+                  "Feb",
+                  "Mar",
+                  "Apr",
+                  "May",
+                  "Jun",
+                  "Jul",
+                  "Aug",
+                  "Sep",
+                  "Oct",
+                  "Nov",
+                  "Dec",
+                ],
+                { $subtract: ["$_id.month", 1] },
+              ],
+            },
+            " ",
+            { $toString: "$_id.year" },
+          ],
+        },
+        revenue: 1,
       },
     },
   ]);
 
-  const formatted = {
-    "18-24": 0,
-    "25-34": 0,
-    "35-44": 0,
-    "45-54": 0,
-    "55+": 0,
-    Unknown: 0,
-  };
+  // 2️⃣ Generate all months in range
+  const allMonths: string[] = [];
+  let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
 
-  rawData.forEach(item => {
-    if (item._id === 18) formatted["18-24"] = item.count;
-    else if (item._id === 25) formatted["25-34"] = item.count;
-    else if (item._id === 31) formatted["35-44"] = item.count;
-    else if (item._id === 41) formatted["45-54"] = item.count;
-    else if (item._id === 41) formatted["45-54"] = item.count;
-    else if (item._id === 41) formatted["55+"] = item.count;
-    else if (item._id === "Unknown") formatted.Unknown = item.count;
-  });
+  while (current <= end) {
+    const monthStr = `${
+      [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ][current.getMonth()]
+    } ${current.getFullYear()}`;
+    allMonths.push(monthStr);
+    current.setMonth(current.getMonth() + 1);
+  }
 
-  return formatted;
+  // 3️⃣ Merge aggregation result with all months, fill 0 for missing
+  const revenueMap = revenueData.reduce((acc, item) => {
+    acc[item.month] = item.revenue;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const finalData = allMonths.map((month) => ({
+    month,
+    revenue: revenueMap[month] || 0,
+  }));
+
+  return finalData;
 };
 
 // Ethnicity Distribution
@@ -58,22 +111,22 @@ const getEthnicityDistribution = async () => {
 
   const rawData = await User.aggregate([
     {
-      $match: { ethnicity: { $in: options } } // Optional: only known options
+      $match: { ethnicity: { $in: options } }, // Optional: only known options
     },
     {
       $group: {
         _id: "$ethnicity",
-        count: { $sum: 1 }
-      }
-    }
+        count: { $sum: 1 },
+      },
+    },
   ]);
 
   // Initialize formatted object
   const formatted: Record<string, number> = {};
-  options.forEach(opt => formatted[opt] = 0);
+  options.forEach((opt) => (formatted[opt] = 0));
   formatted["Unknown"] = 0;
 
-  rawData.forEach(item => {
+  rawData.forEach((item) => {
     if (options.includes(item._id)) formatted[item._id] = item.count;
     else formatted["Unknown"] += item.count;
   });
@@ -84,38 +137,33 @@ const getEthnicityDistribution = async () => {
 // Gender Distribution
 
 const getGenderDistribution = async () => {
-  const options = [
-    "MAN",
-    "WOMEN",
-    "NON-BINARY",
-    "TRANS MAN",
-    "TRANS WOMAN"
-  ];
+  const options = ["MAN", "WOMEN", "NON-BINARY", "TRANS MAN", "TRANS WOMAN"];
 
   const rawData = await User.aggregate([
     {
-      $match: { gender: { $in: options } } // optional filter
+      $match: { gender: { $in: options } }, // optional filter
     },
     {
       $group: {
         _id: "$gender",
-        count: { $sum: 1 }
-      }
-    }
+        count: { $sum: 1 },
+      },
+    },
   ]);
 
   // Total users
   const totalUsers = await User.countDocuments();
- 
+
   // Initialize formatted object
   const formatted: Record<string, { total: number; percentage: string }> = {};
-  options.forEach(opt => formatted[opt] = { total: 0, percentage: "0%" });
+  options.forEach((opt) => (formatted[opt] = { total: 0, percentage: "0%" }));
   formatted["Unknown"] = { total: 0, percentage: "0%" };
 
-  rawData.forEach(item => {
+  rawData.forEach((item) => {
     if (options.includes(item._id)) {
       formatted[item._id].total = item.count;
-      formatted[item._id].percentage = ((item.count / totalUsers) * 100).toFixed(2) + "%";
+      formatted[item._id].percentage =
+        ((item.count / totalUsers) * 100).toFixed(2) + "%";
     } else {
       formatted["Unknown"].total += item.count;
     }
@@ -123,12 +171,12 @@ const getGenderDistribution = async () => {
 
   // If Unknown exists, calculate percentage
   if (formatted["Unknown"].total > 0) {
-    formatted["Unknown"].percentage = ((formatted["Unknown"].total / totalUsers) * 100).toFixed(2) + "%";
+    formatted["Unknown"].percentage =
+      ((formatted["Unknown"].total / totalUsers) * 100).toFixed(2) + "%";
   }
 
   return formatted;
 };
-
 
 const getMonthlySignups = async () => {
   const monthlySignups = await User.aggregate([
@@ -144,7 +192,7 @@ const getMonthlySignups = async () => {
     { $sort: { "_id.year": 1, "_id.month": 1 } },
   ]);
 
-  const formatted = monthlySignups.map(item => ({
+  const formatted = monthlySignups.map((item) => ({
     year: item._id.year,
     month: item._id.month,
     totalUsers: item.totalUsers,
@@ -153,10 +201,9 @@ const getMonthlySignups = async () => {
   return formatted;
 };
 
-
 export const DashboardService = {
-  getAgeDistribution,
+  getTotalRevenue,
   getEthnicityDistribution,
   getGenderDistribution,
-  getMonthlySignups
+  getMonthlySignups,
 };
