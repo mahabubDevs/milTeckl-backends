@@ -44,5 +44,9 @@ export default {
     authToken: process.env.TWILIO_AUTH_TOKEN,
     twilioNumber: process.env.TWILIO_NUMBER,
   },
+  veevoTech: {
+    apiKey: process.env.VEEVOTECH_API_KEY,
+    senderId: process.env.VEEVOTECH_SENDER_ID,
+  },
   frontendUrl: process.env.FRONTEND_URL,
 };
