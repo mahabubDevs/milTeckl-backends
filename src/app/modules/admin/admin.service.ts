@@ -46,7 +46,7 @@ const updateUserStatus = async (id: string, status: USER_STATUS) => {
 
 const getAllCustomers = async (query: Record<string, unknown>) => {
   const baseQuery = User.find({ role: "USER" }).select(
-    "firstName lastName phone email status "
+    "firstName lastName phone email status address "
   );
 
   const allCusomtersQuery = new QueryBuilder(baseQuery, query)
