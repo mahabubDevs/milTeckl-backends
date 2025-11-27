@@ -60,6 +60,16 @@ const getAllCustomers = catchAsync(async (req: Request, res: Response) => {
     pagination: result.pagination,
   });
 });
+const getAllMerchants = catchAsync(async (req: Request, res: Response) => {
+  const result = await AdminService.getAllMerchants(req.query);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "All merchants Retrieved Successfully",
+    data: result.allmerchants,
+    pagination: result.pagination,
+  });
+});
 
 export const AdminController = {
   deleteAdmin,
@@ -67,4 +77,5 @@ export const AdminController = {
   getAdmin,
   updateUserStatus,
   getAllCustomers,
+  getAllMerchants,
 };

@@ -36,4 +36,9 @@ router.get(
   auth(USER_ROLES.SUPER_ADMIN),
   AdminController.getAllCustomers
 );
+router.get(
+  "/merchants",
+  auth(USER_ROLES.SUPER_ADMIN),
+  AdminController.getAllMerchants
+);
 export const AdminRoutes = router;

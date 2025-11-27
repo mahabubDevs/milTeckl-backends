@@ -1,7 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
-import { USER_STATUS } from "../../../enums/user";
+import { USER_ROLES, USER_STATUS } from "../../../enums/user";
 import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 
@@ -64,6 +64,26 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
     pagination,
   };
 };
+const getAllMerchants = async (query: Record<string, unknown>) => {
+  const baseQuery = User.find({ role: USER_ROLES.MERCENT }).select(
+    "firstName lastName phone email status address  "
+  );
+
+  const allMerchantsQuery = new QueryBuilder(baseQuery, query)
+    .search(["firstName", "lastName", "email", "phone"])
+    .filter()
+    .paginate()
+    .sort();
+
+  const [allmerchants, pagination] = await Promise.all([
+    allMerchantsQuery.modelQuery.lean(),
+    allMerchantsQuery.getPaginationInfo(),
+  ]);
+  return {
+    allmerchants,
+    pagination,
+  };
+};
 
 export const AdminService = {
   createAdminToDB,
@@ -71,4 +91,5 @@ export const AdminService = {
   getAdminFromDB,
   updateUserStatus,
   getAllCustomers,
+  getAllMerchants,
 };
