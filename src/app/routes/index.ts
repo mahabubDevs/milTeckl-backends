@@ -21,6 +21,7 @@ import { SalesRepRoutes } from "../modules/salesRep/salesRep.route";
 import { GiftCardRoute } from "../modules/giftCard/giftCard.route";
 import { AdminRoutes } from "../modules/admin/admin.route";
 import { SellManagementRoute } from "../modules/sellManagement/sellManagement.routes";
+import { DashboardMercentRoutes } from "../modules/dashboardOverviewMercent/dashbordMercent.route";
 // import { AuraBundleRoute } from '../modules/shopAuroBundle/auraBundle.routes';
 // import { BuyCall } from '../modules/buy/buy.routes';
 // import { CallBundleRoute } from '../modules/shopCallBundle/callBundle.routes';
@@ -51,6 +52,7 @@ const apiRoutes = [
   { path: "/sales-rep", route: SalesRepRoutes },
   { path: "/gift-card", route: GiftCardRoute },
   { path: "/admin", route: AdminRoutes },
+  { path: "/mercent", route: DashboardMercentRoutes },
   { path: "/sell", route: SellManagementRoute },
   // {path: "/chat", route:ChatRoutes},
   // {path: "/game", route:GameRoutes},
