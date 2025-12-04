@@ -41,13 +41,16 @@ const getYearlyRevenue = catchAsync(async (req: Request, res: Response) => {
 
 
 const getMerchantReport = catchAsync(async (req, res) => {
-    const merchantId = (req.user as any)?._id;
+  const merchantId = (req.user as any)?._id;
+  const range = (req.query.range as string) || "7d"; // today, 7d, 1m, 3m
 
-  const result =
-    await DashboardMercentService.getReportForMerchantDashboard(merchantId);
+  const result = await DashboardMercentService.getReportForMerchantDashboard(
+    merchantId,
+    range
+  );
 
   sendResponse(res, {
-    statusCode: StatusCodes.OK,
+    statusCode: 200,
     success: true,
     message: "Merchant report fetched successfully",
     data: result,

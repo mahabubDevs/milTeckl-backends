@@ -191,24 +191,63 @@ const getYearlyRevenue = async (query: any) => {
 
 
 
-const getReportForMerchantDashboard = async (merchantId: string) => {
+const getReportForMerchantDashboard = async (
+  merchantId: string,
+  range: string = "7d"
+) => {
+  const today = new Date();
+  let startDate: Date | undefined;
+
+  switch (range) {
+    case "today":
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case "7d":
+      startDate = new Date();
+      startDate.setDate(today.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case "1m":
+      startDate = new Date();
+      startDate.setMonth(today.getMonth() - 1);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case "3m":
+      startDate = new Date();
+      startDate.setMonth(today.getMonth() - 3);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    default:
+      startDate = new Date();
+      startDate.setDate(today.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      break;
+  }
+
+  const dateFilter = startDate ? { $gte: startDate, $lte: today } : undefined;
 
   // Total Members = unique buyers
-  const buyers = await GiftCard.distinct("userId", {
-    merchantId,
+  const buyersQuery: any = {
+    merchantId: new mongoose.Types.ObjectId(merchantId),
     userId: { $ne: null },
-  });
+  };
+  if (dateFilter) buyersQuery.createdAt = dateFilter;
+
+  const buyers = await GiftCard.distinct("userId", buyersQuery);
   const totalMembers = buyers.length;
 
   // Rewards Redeemed = giftcard status = redeem
-  const rewardsRedeemed = await GiftCard.countDocuments({
-    merchantId,
-    status: "redeem",
-  });
+  const redeemedQuery: any = { merchantId: new mongoose.Types.ObjectId(merchantId), status: "redeem" };
+  if (dateFilter) redeemedQuery.createdAt = dateFilter;
+  const rewardsRedeemed = await GiftCard.countDocuments(redeemedQuery);
 
   // Total Points Issued = sum(pointsEarned)
+  const pointsMatch: any = { merchantId: new mongoose.Types.ObjectId(merchantId) };
+  if (dateFilter) pointsMatch.createdAt = dateFilter;
+
   const pointsAgg = await ApplyRequest.aggregate([
-    { $match: { merchantId } },
+    { $match: pointsMatch },
     {
       $group: {
         _id: null,
@@ -219,8 +258,11 @@ const getReportForMerchantDashboard = async (merchantId: string) => {
   const totalPointsIssued = pointsAgg[0]?.totalPoints || 0;
 
   // Total Sales = sum(billAmount)
+  const salesMatch: any = { merchantId: new mongoose.Types.ObjectId(merchantId), status: "merchant_confirmed" };
+  if (dateFilter) salesMatch.createdAt = dateFilter;
+
   const salesAgg = await ApplyRequest.aggregate([
-    { $match: { merchantId, status: "merchant_confirmed" } },
+    { $match: salesMatch },
     {
       $group: {
         _id: null,
@@ -231,13 +273,13 @@ const getReportForMerchantDashboard = async (merchantId: string) => {
   const totalSales = salesAgg[0]?.totalSales || 0;
 
   return {
+    range,
     totalSales,
     totalMembers,
     totalPointsIssued,
     rewardsRedeemed,
   };
 };
-
 
 
 
@@ -266,32 +308,37 @@ const getWeeklySellReport = async (merchantId: string) => {
     { $sort: { "_id": 1 } },
   ]);
 
-  // full 7 days array
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let totalSell = 0;
+
   const result: any[] = [];
   for (let i = 0; i < 7; i++) {
     const date = new Date();
     date.setDate(today.getDate() - (6 - i));
     const formatted = date.toISOString().split("T")[0];
+    const dayName = dayNames[date.getDay()];
 
     const found = data.find(d => d._id === formatted);
+    const dailySell = found?.totalSell || 0;
+    totalSell += dailySell;
 
     result.push({
-      date: formatted,
-      totalSell: found?.totalSell || 0,
+      day: dayName,
+      totalSell: dailySell,
       totalOrders: found?.totalOrders || 0,
     });
   }
 
-  // total sell for percentage
-  const totalSell = result.reduce((acc, day) => acc + day.totalSell, 0);
-
-  // add percentage
+  // percentage
   const finalResult = result.map(day => ({
     ...day,
     percentage: totalSell > 0 ? Number(((day.totalSell / totalSell) * 100).toFixed(2)) : 0,
   }));
 
-  return finalResult;
+  return {
+    totalSell, // 7 days total
+    weeklyReport: finalResult,
+  };
 };
 
 

@@ -37,7 +37,7 @@ router.patch(
 
 // MERCHANT CONFIRM APPLY REQUEST
 router.patch(
-  "/apply-request/merchant/confirm/:requestId",
+  "/apply-request/:requestId",
   auth(USER_ROLES.MERCENT),
   SellManagementController.merchantConfirmRequest
 );
