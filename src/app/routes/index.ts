@@ -27,6 +27,8 @@ import { PromoMercentRoutes } from "../modules/mercent/promotionMercent/promotio
 import { TierRoutes } from "../modules/mercent/point&TierSystem/tier.route";
 import { DigitalCardRoutes } from "../modules/customer/digitalCard/digitalCard.routes";
 import { SellManagementRoute } from "../modules/mercent/mercentSellManagement/mercentSellManagement.route";
+import { RatingRoutes } from "../modules/customer/rating/rating.routes";
+import { FavoriteRoutes } from "../modules/customer/favorite/favorite.routes";
 // import { AuraBundleRoute } from '../modules/shopAuroBundle/auraBundle.routes';
 // import { BuyCall } from '../modules/buy/buy.routes';
 // import { CallBundleRoute } from '../modules/shopCallBundle/callBundle.routes';
@@ -63,6 +65,8 @@ const apiRoutes = [
   { path: "/contact", route: contacUsRoutes },
   { path: "/add-promotion", route: DigitalCardRoutes },
   { path: "/sell", route: SellManagementRoute },
+  { path: "/rating", route: RatingRoutes },
+  { path: "/favorite", route: FavoriteRoutes },
   // {path: "/chat", route:ChatRoutes},
   // {path: "/game", route:GameRoutes},
   // {path: "/event", route:EventRoutes},

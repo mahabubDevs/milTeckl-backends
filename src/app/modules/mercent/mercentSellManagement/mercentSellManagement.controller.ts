@@ -91,68 +91,149 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
 // });
 
 
-// const requestApproval = catchAsync(async (req: Request, res: Response) => {
-//   const { digitalCardCode, promotionId } = req.body;
-//   const merchant = req.user as IUser;
+const requestApproval = catchAsync(async (req: Request, res: Response) => {
+  const { digitalCardCode, promotionId } = req.body;
+  const merchant = req.user as IUser;
 
-//   if (!merchant._id) {
-//     return sendResponse(res, {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       success: false,
-//       message: "Merchant ID not found",
-//     });
-//   }
+  if (!merchant._id) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "Merchant ID not found",
+    });
+  }
 
-//   const result = await SellService.requestApproval(
-//     merchant._id.toString(),
-//     digitalCardCode,
-//     promotionId
-//   );
+  const result = await SellService.requestApproval(
+    merchant._id.toString(),
+    digitalCardCode,
+    promotionId
+  );
 
-//   sendResponse(res, {
-//     statusCode: StatusCodes.OK,
-//     success: true,
-//     message: "Approval request sent to user",
-//     data: result,
-//   });
-// });
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Approval request sent to user",
+    data: result,
+  });
+});
 
+// User → Get Pending Requests
+const getPendingRequests = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as IUser;
 
-// const approvePromotion = catchAsync(async (req: Request, res: Response) => {
-//   const { digitalCardId, promotionId } = req.body;
-//   const user = req.user as IUser;
+  if (!user._id) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "User ID not found",
+    });
+  }
 
-//   if (!user._id) {
-//     return sendResponse(res, {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       success: false,
-//       message: "User ID not found",
-//     });
-//   }
+  const requests = await SellService.getPendingRequests(user._id.toString());
 
-//   const result = await SellService.approvePromotion(
-//     digitalCardId,
-//     promotionId,
-//     user._id.toString()
-//   );
-
-//   sendResponse(res, {
-//     statusCode: StatusCodes.OK,
-//     success: true,
-//     message: "Promotion approved successfully",
-//     data: result,
-//   });
-// });
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Pending promotions fetched",
+    data: requests
+  });
+});
 
 
+const approvePromotion = catchAsync(async (req: Request, res: Response) => {
+  const { digitalCardId, promotionId } = req.body;
+  const user = req.user as IUser;
+
+  if (!user._id) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "User ID not found",
+    });
+  }
+
+  const result = await SellService.approvePromotion(
+    digitalCardId,
+    promotionId,
+    user._id.toString()
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Promotion approved successfully",
+    data: result,
+  });
+});
+
+
+const approvePromotionreject = catchAsync(async (req: Request, res: Response) => {
+  const { digitalCardId, promotionId } = req.body;
+  const user = req.user as IUser;
+
+  if (!user._id) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "User ID not found",
+    });
+  }
+
+  const result = await SellService.approvePromotionReject(
+    digitalCardId,
+    promotionId,
+    user._id.toString()
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Promotion approved successfully",
+    data: result,
+  });
+});
 
 
 
+const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user as IUser;
+  const { digitalCardId, type } = req.query;
 
+  if (!user._id) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "User ID not found",
+    });
+  }
+
+  if (!digitalCardId) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "digitalCardId is required",
+    });
+  }
+
+  const history = await SellService.getPointsHistory(
+    digitalCardId.toString(),
+    (type as "all" | "earn" | "redeem") || "all"
+  );
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Points transactions fetched successfully",
+    data: history,
+  });
+});
 
 export default { 
   checkout ,
-  // requestApproval,
-  // approvePromotion,
+  requestApproval,
+  getPendingRequests,
+  approvePromotion,
+  approvePromotionreject,
+  getPointsHistory
   // finalizeCheckout
 };

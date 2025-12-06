@@ -119,6 +119,7 @@ const updateUserZodSchema = z.object({
     height: z.number().min(30).max(250).optional(),
     minHeight: z.number().min(30).max(250).optional(),
     maxHeight: z.number().min(30).max(250).optional(),
+    address: z.string().optional(),
 
     drinking: z.boolean().optional(),
     marijuana: z.boolean().optional(),

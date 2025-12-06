@@ -89,88 +89,176 @@ const checkout = async (
 // -----------------------------
 // 2. Merchant → Request Approval
 // -----------------------------
-// const requestApproval = async (
-//   merchantId: string,
-//   digitalCardCode: string,
-//   promotionId: string
-// ) => {
+const requestApproval = async (
+  merchantId: string,
+  digitalCardCode: string,
+  promotionId: string
+) => {
 
-//   const digitalCard = await DigitalCard.findOne({
-//     merchantId: new Types.ObjectId(merchantId),
-//     cardCode: digitalCardCode,
-//   });
+  const digitalCard = await DigitalCard.findOne({
+    merchantId: new Types.ObjectId(merchantId),
+    cardCode: digitalCardCode,
+  });
 
-//   if (!digitalCard) {
-//     throw new Error("Digital card not found for this merchant");
-//   }
+  if (!digitalCard) {
+    throw new Error("Digital card not found for this merchant");
+  }
 
-//   const promo = digitalCard.promotions.find(
-//     (p) => p.promotionId?.toString() === promotionId
-//   );
+  const promo = digitalCard.promotions.find(
+    (p) => p.promotionId?.toString() === promotionId
+  );
 
-//   if (!promo) {
-//     throw new Error("Promotion not found in digital card");
-//   }
+  if (!promo) {
+    throw new Error("Promotion not found in digital card");
+  }
 
-//   if (promo.status !== "pending") {
-//     throw new Error("Promotion does not require approval");
-//   }
+  if (promo.status !== "pending") {
+    throw new Error("Promotion does not require approval");
+  }
 
-//   // এখানে চাইলে push notification পাঠাতে পারো
-//   // notifyUser(digitalCard.userId, "Merchant requested approval");
+  // এখানে চাইলে push notification পাঠাতে পারো
+  // notifyUser(digitalCard.userId, "Merchant requested approval");
 
-//   return { userId: digitalCard.userId };
-// };
-
-
-// // -----------------------------
-// // 3. User → Approve Promotion
-// // -----------------------------
-// const approvePromotion = async (
-//   digitalCardId: string,
-//   promotionId: string,
-//   userId: string
-// ) => {
-
-//   const digitalCard = await DigitalCard.findOne({
-//     _id: new Types.ObjectId(digitalCardId),
-//     userId: new Types.ObjectId(userId),
-//   });
-
-//   if (!digitalCard) {
-//     throw new Error("Digital card not found for user");
-//   }
-
-//   const promo = digitalCard.promotions.find(
-//     (p) => p.promotionId?.toString() === promotionId
-//   );
-
-//   if (!promo) {
-//     throw new Error("Promotion not found in card");
-//   }
-
-//   if (promo.status !== "pending") {
-//     throw new Error("Promotion already approved or used");
-//   }
-
-//   // Approval done
-//   promo.status = "unused";
-
-//   await digitalCard.save();
-
-//   return { status: "approved" };
-// };
+  return { userId: digitalCard.userId };
+};
 
 
 
+// -----------------------------
+const getPendingRequests = async (userId: string) => {
+  const cards = await DigitalCard.find({
+    userId: new Types.ObjectId(userId),
+    "promotions.status": "pending"
+  });
+
+  interface PendingRequest {
+    digitalCardId: Types.ObjectId;
+    promotionId: Types.ObjectId | undefined | null;
+    cardCode: string;
+  }
+
+  const requests: PendingRequest[] = [];
+  cards.forEach(card => {
+    card.promotions.forEach(p => {
+      if (p.status === "pending") {
+        requests.push({
+          digitalCardId: card._id,
+          promotionId: p.promotionId,
+          cardCode: card.cardCode
+        });
+      }
+    });
+  });
+
+  return requests;
+};
+// -----------------------------
+// 3. User → Approve Promotion
+// -----------------------------
+const approvePromotion = async (
+  digitalCardId: string,
+  promotionId: string,
+  userId: string
+) => {
+
+  const digitalCard = await DigitalCard.findOne({
+    _id: new Types.ObjectId(digitalCardId),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!digitalCard) {
+    throw new Error("Digital card not found for user");
+  }
+
+  const promo = digitalCard.promotions.find(
+    (p) => p.promotionId?.toString() === promotionId
+  );
+
+  if (!promo) {
+    throw new Error("Promotion not found in card");
+  }
+
+  if (promo.status !== "pending") {
+    throw new Error("Promotion already approved or used");
+  }
+
+  // Approval done
+  promo.status = "unused";
+
+  await digitalCard.save();
+
+  return { status: "approved" };
+};
 
 
+const approvePromotionReject = async (
+  digitalCardId: string,
+  promotionId: string,
+  userId: string
+) => {
+
+  const digitalCard = await DigitalCard.findOne({
+    _id: new Types.ObjectId(digitalCardId),
+    userId: new Types.ObjectId(userId),
+  });
+
+  if (!digitalCard) {
+    throw new Error("Digital card not found for user");
+  }
+
+  const promo = digitalCard.promotions.find(
+    (p) => p.promotionId?.toString() === promotionId
+  );
+
+  if (!promo) {
+    throw new Error("Promotion not found in card");
+  }
+
+  if (promo.status !== "pending") {
+    throw new Error("Promotion already approved or used");
+  }
+
+  // Approval done
+  promo.status = "pending";
+
+  await digitalCard.save();
+
+  return { status: "reject" };
+};
+
+
+
+const getPointsHistory = async (
+  digitalCardId: string,
+  type: "all" | "earn" | "redeem" = "all"
+) => {
+  const query: any = { digitalCardId: new Types.ObjectId(digitalCardId) };
+
+  if (type === "earn") query.pointsEarned = { $gt: 0 };
+  if (type === "redeem") query.pointsEarned = { $lt: 0 };
+
+  const history = await Sell.find(query).sort({ createdAt: -1 });
+
+  // map করে front-end friendly format বানাচ্ছি
+  return history.map(tx => ({
+    transactionId: tx._id,
+    totalBill: tx.totalBill,
+    discountedBill: tx.discountedBill,
+    points: tx.pointsEarned,
+    promotionId: tx.promotionId,
+    status: tx.status,
+    date: tx.createdAt
+  }));
+};
 
 // -----------------------------
 // EXPORT SERVICE
 // -----------------------------
 export const SellService = { 
   checkout,
-  // requestApproval,
-  // approvePromotion
+  requestApproval,
+  getPendingRequests,
+  approvePromotion,
+  approvePromotionReject,
+  getPointsHistory
 };
