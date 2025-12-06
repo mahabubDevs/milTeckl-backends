@@ -25,7 +25,7 @@ const fileUploadHandler = () => {
       switch (file.fieldname) {
         case "image":
         case "profile":
-        case "photo":
+        case "coverPhoto":
           uploadDir = path.join(baseUploadDir, "images");
           break;
         case "excel":
@@ -52,7 +52,7 @@ const fileUploadHandler = () => {
   });
 
   const filterFilter = (req: Request, file: any, cb: FileFilterCallback) => {
-    const imageFields = ["image", "profile", "photo"];
+    const imageFields = ["image", "profile", "coverPhoto"];
     if (imageFields.includes(file.fieldname)) {
       if (
         file.mimetype === "image/jpeg" ||
@@ -89,7 +89,7 @@ const fileUploadHandler = () => {
   const upload = multer({ storage, fileFilter: filterFilter }).fields([
     { name: "image", maxCount: 3 },
     { name: "profile", maxCount: 1 },
-    { name: "photo", maxCount: 1 },
+    { name: "coverPhoto", maxCount: 1 },
     { name: "excel", maxCount: 1 },
   ]);
 
