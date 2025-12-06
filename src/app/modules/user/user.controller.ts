@@ -80,16 +80,16 @@ const updateProfile = catchAsync(
     if (bodyData?.latitude && bodyData?.longitude) {
       bodyData.location = {
         type: "Point",
-        coordinates: [
-          parseFloat(bodyData.longitude),
-          parseFloat(bodyData.latitude),
-        ],
+        coordinates: [Number(bodyData.longitude), Number(bodyData.latitude)],
       };
+      delete bodyData.latitude;
+      delete bodyData.longitude;
     }
-    console.log(bodyData);
+
     const data = {
       profile,
       photo,
+
       ...bodyData,
     };
 
