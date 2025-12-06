@@ -1,7 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
-import { USER_ROLES, USER_STATUS } from "../../../enums/user";
+import { APPROVE_STATUS, USER_ROLES, USER_STATUS } from "../../../enums/user";
 import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 
@@ -85,7 +85,6 @@ const getAllMerchants = async (query: Record<string, unknown>) => {
   };
 };
 
-
 // ====== customer crue operations ====== //
 //==== single customer details ====//
 
@@ -97,7 +96,6 @@ const getSingleCustomer = async (id: string) => {
   }
   return user;
 };
-
 
 //===== update customer ======//
 
@@ -115,9 +113,6 @@ const updateCustomer = async (id: string, payload: Record<string, unknown>) => {
   return customer;
 };
 
-
-
-
 //===== delete customer ======//
 
 const deleteCustomer = async (id: string) => {
@@ -130,9 +125,11 @@ const deleteCustomer = async (id: string) => {
   return user;
 };
 
-
 //===== customer status update ======//
-const updateCustomerStatus = async (id: string, status: "active" | "inactive") => {
+const updateCustomerStatus = async (
+  id: string,
+  status: "active" | "inactive"
+) => {
   const user = await User.findOneAndUpdate(
     { _id: id, role: "USER" },
     { status },
@@ -145,8 +142,6 @@ const updateCustomerStatus = async (id: string, status: "active" | "inactive") =
 
   return user;
 };
-
-
 
 //================== mercent crue operations ===================//
 //=== singel merchant details ===//
@@ -162,11 +157,10 @@ const getSingleMerchant = async (id: string) => {
 
 //==== update merchant ====//
 const updateMerchant = async (id: string, payload: Record<string, unknown>) => {
-  const merchant = await User.findByIdAndUpdate(
-    id,
-    payload,
-    { new: true, runValidators: true }
-  ).lean();
+  const merchant = await User.findByIdAndUpdate(id, payload, {
+    new: true,
+    runValidators: true,
+  }).lean();
 
   if (!merchant) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
@@ -174,7 +168,6 @@ const updateMerchant = async (id: string, payload: Record<string, unknown>) => {
 
   return merchant;
 };
-
 
 //==== delete merchant ====//
 const deleteMerchant = async (id: string) => {
@@ -185,10 +178,9 @@ const deleteMerchant = async (id: string) => {
   }
 
   return merchant;
-};  
+};
 
 //==== merchant status update ====//
-
 
 const updateMerchantStatus = async (
   id: string,
@@ -206,8 +198,22 @@ const updateMerchantStatus = async (
 
   return merchant;
 };
+const updateMerchantApproveStatus = async (
+  id: string,
+  approveStatus: APPROVE_STATUS
+) => {
+  const merchant = await User.findByIdAndUpdate(
+    id,
+    { approveStatus },
+    { new: true }
+  ).lean();
 
+  if (!merchant) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
 
+  return merchant;
+};
 
 export const AdminService = {
   createAdminToDB,
@@ -226,4 +232,5 @@ export const AdminService = {
   updateMerchant,
   deleteMerchant,
   updateMerchantStatus,
+  updateMerchantApproveStatus,
 };

@@ -71,7 +71,6 @@ const getAllMerchants = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-
 // ======== customer crue operations ======== //
 
 //=== singel customer details ===//
@@ -100,7 +99,9 @@ const updateCustomer = catchAsync(async (req, res) => {
   }
 
   // Now handle uploaded image
-  const files = req.files as { [key: string]: Express.Multer.File[] } | undefined;
+  const files = req.files as
+    | { [key: string]: Express.Multer.File[] }
+    | undefined;
 
   if (files?.image?.length) {
     bodyData.profile = files.image[0].path;
@@ -117,8 +118,6 @@ const updateCustomer = catchAsync(async (req, res) => {
     data: result,
   });
 });
-
-
 
 //===== delete customer ======//
 const deleteCustomer = catchAsync(async (req, res) => {
@@ -147,7 +146,6 @@ const updateCustomerStatus = catchAsync(async (req, res) => {
   });
 });
 
-
 //================= mercent crue operations ===================//
 
 //=== singel merchant details ===//
@@ -160,8 +158,7 @@ const getSingleMerchant = catchAsync(async (req, res) => {
     message: "Merchant retrieved successfully",
     data: result,
   });
-});  
-
+});
 
 //===== update merchant ======//
 
@@ -178,10 +175,12 @@ const updateMerchant = catchAsync(async (req, res) => {
   }
 
   // Handle files
-  const files = req.files as { [key: string]: Express.Multer.File[] } | undefined;
+  const files = req.files as
+    | { [key: string]: Express.Multer.File[] }
+    | undefined;
 
   if (files?.image && files.image.length > 0) {
-    payload.profile = files.image[0].path;             // Attach image path to payload
+    payload.profile = files.image[0].path; // Attach image path to payload
   }
 
   const result = await AdminService.updateMerchant(id, payload);
@@ -193,8 +192,6 @@ const updateMerchant = catchAsync(async (req, res) => {
     data: result,
   });
 });
- 
-
 
 //===== delete merchant ======//
 const deleteMerchant = catchAsync(async (req, res) => {
@@ -222,7 +219,19 @@ const updateMerchantStatus = catchAsync(async (req, res) => {
     data: result,
   });
 });
+const updateMerchantApproveStatus = catchAsync(async (req, res) => {
+  const result = await AdminService.updateMerchantApproveStatus(
+    req.params.id,
+    req.body.approveStatus
+  );
 
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Merchant approve status updated successfully",
+    data: result,
+  });
+});
 
 export const AdminController = {
   deleteAdmin,
@@ -241,4 +250,5 @@ export const AdminController = {
   updateMerchant,
   deleteMerchant,
   updateMerchantStatus,
+  updateMerchantApproveStatus,
 };

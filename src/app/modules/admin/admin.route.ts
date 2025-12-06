@@ -34,21 +34,16 @@ router.patch(
 
 router.get(
   "/customers",
-  auth(USER_ROLES.SUPER_ADMIN,USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AdminController.getAllCustomers
 );
-
-
-
-
-
 
 // ========================= mercent crue operations ========================= //
 //=== all merchants ===//
 
 router.get(
   "/merchants",
-  auth(USER_ROLES.SUPER_ADMIN,USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AdminController.getAllMerchants
 );
 
@@ -81,18 +76,21 @@ router.patch(
   AdminController.updateMerchantStatus
 );
 
-
-
+router.patch(
+  "/merchants/:id/approve-status",
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  validateRequest(AdminValidation.updateMerchantApproveStatusZodSchema),
+  AdminController.updateMerchantApproveStatus
+);
 
 // ========================= customer crue operations ========================= //
 
 //=== all customers ===//
 router.get(
   "/customers",
-  auth(USER_ROLES.SUPER_ADMIN,USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AdminController.getAllCustomers
 );
-
 
 //===singel customer details ===//
 router.get(
@@ -109,7 +107,6 @@ router.patch(
   AdminController.updateCustomer
 );
 
-
 //=== delete customer ===//
 router.delete(
   "/customers/:id",
@@ -124,12 +121,5 @@ router.patch(
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
   AdminController.updateCustomerStatus
 );
- 
-
-
-
-
-
-
 
 export const AdminRoutes = router;
