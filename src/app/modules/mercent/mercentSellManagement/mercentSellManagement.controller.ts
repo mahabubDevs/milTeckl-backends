@@ -91,7 +91,68 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
 // });
 
 
+// const requestApproval = catchAsync(async (req: Request, res: Response) => {
+//   const { digitalCardCode, promotionId } = req.body;
+//   const merchant = req.user as IUser;
+
+//   if (!merchant._id) {
+//     return sendResponse(res, {
+//       statusCode: StatusCodes.BAD_REQUEST,
+//       success: false,
+//       message: "Merchant ID not found",
+//     });
+//   }
+
+//   const result = await SellService.requestApproval(
+//     merchant._id.toString(),
+//     digitalCardCode,
+//     promotionId
+//   );
+
+//   sendResponse(res, {
+//     statusCode: StatusCodes.OK,
+//     success: true,
+//     message: "Approval request sent to user",
+//     data: result,
+//   });
+// });
+
+
+// const approvePromotion = catchAsync(async (req: Request, res: Response) => {
+//   const { digitalCardId, promotionId } = req.body;
+//   const user = req.user as IUser;
+
+//   if (!user._id) {
+//     return sendResponse(res, {
+//       statusCode: StatusCodes.BAD_REQUEST,
+//       success: false,
+//       message: "User ID not found",
+//     });
+//   }
+
+//   const result = await SellService.approvePromotion(
+//     digitalCardId,
+//     promotionId,
+//     user._id.toString()
+//   );
+
+//   sendResponse(res, {
+//     statusCode: StatusCodes.OK,
+//     success: true,
+//     message: "Promotion approved successfully",
+//     data: result,
+//   });
+// });
+
+
+
+
+
+
+
 export default { 
   checkout ,
+  // requestApproval,
+  // approvePromotion,
   // finalizeCheckout
 };

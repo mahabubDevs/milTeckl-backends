@@ -91,6 +91,10 @@ const userSchema = new Schema<IUser, UserModal>(
       type: String,
       default: null,
     },
+    address: {
+      type: String,
+      required: false,
+    },
 
     verified: {
       type: Boolean,

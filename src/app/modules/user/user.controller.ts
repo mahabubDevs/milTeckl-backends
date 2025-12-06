@@ -69,9 +69,14 @@ const updateProfile = catchAsync( async (req: Request, res: Response, next: Next
     if (req.files && 'image' in req.files && req.files.image[0]) {
         profile = `/images/${req.files.image[0].filename}`;
     }
+    let photo;
+    if (req.files && 'image' in req.files && req.files.image[0]) {
+        photo = `/images/${req.files.image[0].filename}`;
+    }
 
     const data = {
         profile,
+        photo,
         ...bodyData,
     };
 
