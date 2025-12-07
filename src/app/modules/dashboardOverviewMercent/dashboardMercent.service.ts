@@ -2,8 +2,9 @@ import { Subscription } from "../subscription/subscription.model";
 import { User } from "../user/user.model";
 import { USER_ROLES, USER_STATUS } from "../../../enums/user";
 import { ApplyRequest } from "../sellManagement/sellManagement.model";
-import { GiftCard } from "../giftCard/giftCard.model";
+
 import mongoose from "mongoose";
+import { Promotion } from "../promotionAdmin/promotionAdmin.model";
 
 const getTotalRevenue = async (query: any) => {
   const startDate = new Date(query.start);
@@ -234,13 +235,13 @@ const getReportForMerchantDashboard = async (
   };
   if (dateFilter) buyersQuery.createdAt = dateFilter;
 
-  const buyers = await GiftCard.distinct("userId", buyersQuery);
+  const buyers = await Promotion.distinct("userId", buyersQuery);
   const totalMembers = buyers.length;
 
   // Rewards Redeemed = giftcard status = redeem
   const redeemedQuery: any = { merchantId: new mongoose.Types.ObjectId(merchantId), status: "redeem" };
   if (dateFilter) redeemedQuery.createdAt = dateFilter;
-  const rewardsRedeemed = await GiftCard.countDocuments(redeemedQuery);
+  const rewardsRedeemed = await Promotion.countDocuments(redeemedQuery);
 
   // Total Points Issued = sum(pointsEarned)
   const pointsMatch: any = { merchantId: new mongoose.Types.ObjectId(merchantId) };
@@ -350,20 +351,18 @@ const getTodayNewMembers = async (merchantId: string) => {
   todayEnd.setHours(23, 59, 59, 999);
 
   // Fetch giftcards bought today
-  const giftCards = await GiftCard.find({
+  const promoshonCard = await Promotion.find({
     merchantId: new mongoose.Types.ObjectId(merchantId),
-    userId: { $ne: null },
     createdAt: { $gte: todayStart, $lte: todayEnd },
   })
-    .populate("userId", "firstName lastName email phone") // buyer details
     .sort({ createdAt: -1 })
     .lean();
 
-  return giftCards.map(gc => ({
+  return promoshonCard.map(gc => ({
     giftCardId: gc._id,
-    title: gc.title,
-    user: gc.userId,
-    points: gc.points,
+    title: gc.name,
+    user: null,
+    discountPercentage: gc.discountPercentage || 0,
     boughtAt: gc.createdAt,
   }));
 };

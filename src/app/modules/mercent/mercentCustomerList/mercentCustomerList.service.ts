@@ -1,13 +1,15 @@
 import mongoose from "mongoose";
-import { GiftCard } from "../../giftCard/giftCard.model";
+
 
 import { User } from "../../user/user.model";
 import QueryBuilder from "../../../../util/queryBuilder";
-import { DigitalCard } from "../../giftCard/digitalCard.model";
+import { Promotion } from "../promotionMercent/promotionMercent.model";
+import { DigitalCard } from "../../customer/digitalCard/digitalCard.model";
+
 
 const getAllMembers = async (merchantId: string, query: Record<string, any>) => {
   // 1️⃣ Get unique buyer IDs from GiftCard
-  const buyerIds = await GiftCard.distinct("userId", {
+  const buyerIds = await Promotion.distinct("userId", {
     merchantId: new mongoose.Types.ObjectId(merchantId),
     userId: { $ne: null },
   });
@@ -51,7 +53,7 @@ const getAllMembers = async (merchantId: string, query: Record<string, any>) => 
 
 const getSingleMember = async (merchantId: string, userId: string) => {
   // Check if user bought gift card from merchant
-  const bought = await GiftCard.findOne({
+  const bought = await Promotion.findOne({
     merchantId: new mongoose.Types.ObjectId(merchantId),
     userId: new mongoose.Types.ObjectId(userId),
   });

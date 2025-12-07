@@ -17,7 +17,6 @@ import { SubscriptionRoutes } from "../modules/subscription/subscription.routes"
 import { PackageRoutes } from "../modules/package/package.routes";
 
 import { SalesRepRoutes } from "../modules/salesRep/salesRep.route";
-import { GiftCardRoute } from "../modules/giftCard/giftCard.route";
 import { AdminRoutes } from "../modules/admin/admin.route";
 // import { SellManagementRoute } from "../modules/sellManagement/sellManagement.routes";
 import { DashboardMercentRoutes } from "../modules/dashboardOverviewMercent/dashbordMercent.route";
@@ -57,7 +56,6 @@ const apiRoutes = [
   { path: "/tier", route: TierRoutes },
   { path: "/package", route: PackageRoutes },
   { path: "/sales-rep", route: SalesRepRoutes },
-  { path: "/gift-card", route: GiftCardRoute },
   { path: "/admin", route: AdminRoutes },
   { path: "/mercent", route: DashboardMercentRoutes },
   { path: "/mercent-customer", route: MercentCustomerListRoutes },

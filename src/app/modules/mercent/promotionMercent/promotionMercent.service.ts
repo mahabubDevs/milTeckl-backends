@@ -1,4 +1,5 @@
 import QueryBuilder from "../../../../util/queryBuilder";
+import { Rating } from "../../customer/rating/rating.model";
 import { IPromotion } from "./promotionMercent.interface";
 import { Promotion } from "./promotionMercent.model";
 
@@ -56,6 +57,44 @@ const togglePromotionInDB = async (id: string): Promise<IPromotion | null> => {
 };
 
 
+const getPopularMerchantsFromDB = async () => {
+  const result = await Rating.aggregate([
+    {
+      $group: {
+        _id: "$merchantId",
+        avgRating: { $avg: "$rating" },
+        totalRatings: { $sum: 1 }
+      }
+    },
+    { $sort: { avgRating: -1, totalRatings: -1 } },
+    { $limit: 20 },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "merchant"
+      }
+    },
+    { $unwind: "$merchant" },
+    {
+      $project: {
+        _id: 1,
+        avgRating: { $round: ["$avgRating", 2] },
+        totalRatings: 1,
+        merchant: {
+          name: 1,
+          email: 1,
+          profile: 1
+        }
+      }
+    }
+  ]);
+
+  return result;
+};
+
+
 export const PromotionService = {
   createPromotionToDB,
   updatePromotionToDB,
@@ -63,4 +102,5 @@ export const PromotionService = {
   getSinglePromotionFromDB,
   deletePromotionFromDB,
   togglePromotionInDB,
+  getPopularMerchantsFromDB
 };
