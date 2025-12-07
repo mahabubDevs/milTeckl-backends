@@ -173,33 +173,42 @@ const getPromotionsOfDigitalCard = async (digitalCardId: string) => {
 };
 
 
-
 const getMerchantDigitalCardWithPromotions = async (merchantId: string, cardCode: string) => {
-    
+
   const digitalCard = await DigitalCard.findOne({ merchantId, cardCode })
-  
     .populate({
-      path: "promotions",
-      match: { startDate: { $lte: new Date() }, endDate: { $gte: new Date() } } // only valid promotions
+      path: "promotions.promotionId",
+      model: "PromotionMercent",
+      select: "name discountPercentage promotionType image startDate endDate status code"
     });
 
-  if (!digitalCard) {
-    return null; // No Digital Card found for this merchant or invalid cardCode
-  }
+  if (!digitalCard) return null;
 
-  // If digital card has no promotions after date filter → return null
-  if (!digitalCard.promotions || digitalCard.promotions.length === 0) {
-    return null;
-  }
+  // Filter only valid promotions
+  const validPromotions = digitalCard.promotions
+    .map((item: any) => {
+      if (item.promotionId) {
+        return {
+          status: item.status,
+          usedAt: item.usedAt,
+          ...item.promotionId.toObject(),
+        };
+      }
+      return null;
+    })
+    .filter(Boolean); // remove null
 
-  // Add availablePoints field (default 0 if not exist)
-//   const availablePoints = digitalCard.availablePoints ?? 0;
+  if (validPromotions.length === 0) return null;
 
   return {
-    digitalCard,
-    // availablePoints,
+    digitalCard: {
+      ...digitalCard.toObject(),
+      promotions: validPromotions,
+    },
   };
 };
+
+
 
 
 
