@@ -62,12 +62,13 @@ const createPromotion = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllPromotions = catchAsync(async (req: Request, res: Response) => {
-  const result = await PromotionService.getAllPromotionsFromDB();
+  const result = await PromotionService.getAllPromotionsFromDB(req.query);
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
     message: "Promotions retrieved successfully",
-    data: result,
+    data: result.promotions,
+    pagination: result.pagination,
   });
 });
 
