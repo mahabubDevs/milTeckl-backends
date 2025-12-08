@@ -15,7 +15,7 @@ router.get("/popular-merchants", PromotionController.getPopularMerchants);
 router.get("/merchants/:id", PromotionController.getDetailsOfMerchant);
 router.get(
   "/users/tier",
-  auth(USER_ROLES.USER),
+  auth(),
   validateRequest(PromotionValidations.getUserTierOfMerchantZodSchema),
   PromotionController.getUserTierOfMerchant
 );

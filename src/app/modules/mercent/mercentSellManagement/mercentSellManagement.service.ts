@@ -89,21 +89,56 @@ const checkout = async (
 // -----------------------------
 // 2. Merchant → Request Approval
 // -----------------------------
+// const requestApproval = async (
+//   merchantId: string,
+//   digitalCardCode: string,
+//   promotionId: string
+// ) => {
+
+//   const digitalCard = await DigitalCard.findOne({
+//     merchantId: new Types.ObjectId(merchantId),
+//     cardCode: digitalCardCode,
+//   });
+
+//   if (!digitalCard) {
+//     throw new Error("Digital card not found for this merchant");
+//   }
+
+//   const promo = digitalCard.promotions.find(
+//     (p) => p.promotionId?.toString() === promotionId
+//   );
+
+//   if (!promo) {
+//     throw new Error("Promotion not found in digital card");
+//   }
+
+//   if (promo.status !== "pending") {
+//     throw new Error("Promotion does not require approval");
+//   }
+
+//   // এখানে চাইলে push notification পাঠাতে পারো
+//   // notifyUser(digitalCard.userId, "Merchant requested approval");
+
+//   return { userId: digitalCard.userId };
+// };
+
 const requestApproval = async (
   merchantId: string,
   digitalCardCode: string,
-  promotionId: string
+  promotionId: string,
+  totalBill: number = 100 // default value, user input দিলে সেটা নেবে
 ) => {
-
+  // 1. Find Digital Card
   const digitalCard = await DigitalCard.findOne({
     merchantId: new Types.ObjectId(merchantId),
     cardCode: digitalCardCode,
   });
 
   if (!digitalCard) {
-    throw new Error("Digital card not found for this merchant");
+    throw new Error("Digital Card not found for this merchant");
   }
 
+  // 2. Find promotion inside digital card
   const promo = digitalCard.promotions.find(
     (p) => p.promotionId?.toString() === promotionId
   );
@@ -116,13 +151,27 @@ const requestApproval = async (
     throw new Error("Promotion does not require approval");
   }
 
-  // এখানে চাইলে push notification পাঠাতে পারো
-  // notifyUser(digitalCard.userId, "Merchant requested approval");
+  // 3. Fetch promotion details
+  const selectedPromotion = await Promotion.findById(promotionId);
+  const discount = selectedPromotion?.discountPercentage || 0;
 
-  return { userId: digitalCard.userId };
+  // 4. Simulate discounted bill
+  const discountedBill = totalBill - (totalBill * discount) / 100;
+
+  // 5. Simulate points earned
+  const pointsEarned = discountedBill;
+
+  // 6. Return simulated response
+  return {
+    merchantId,
+    userId: digitalCard.userId,
+    digitalCardId: digitalCard._id,
+    promotionId,
+    totalBill,
+    discountedBill,
+    pointsEarned,
+  };
 };
-
-
 
 // -----------------------------
 const getPendingRequests = async (userId: string) => {

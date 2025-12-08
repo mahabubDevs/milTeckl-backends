@@ -91,8 +91,34 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
 // });
 
 
+// const requestApproval = catchAsync(async (req: Request, res: Response) => {
+//   const { digitalCardCode, promotionId } = req.body;
+//   const merchant = req.user as IUser;
+
+//   if (!merchant._id) {
+//     return sendResponse(res, {
+//       statusCode: StatusCodes.BAD_REQUEST,
+//       success: false,
+//       message: "Merchant ID not found",
+//     });
+//   }
+
+//   const result = await SellService.requestApproval(
+//     merchant._id.toString(),
+//     digitalCardCode,
+//     promotionId
+//   );
+
+//   sendResponse(res, {
+//     statusCode: StatusCodes.OK,
+//     success: true,
+//     message: "Approval request sent to user",
+//     data: result,
+//   });
+// });
+
 const requestApproval = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, promotionId } = req.body;
+  const { digitalCardCode, promotionId, totalBill } = req.body;
   const merchant = req.user as IUser;
 
   if (!merchant._id) {
@@ -106,16 +132,20 @@ const requestApproval = catchAsync(async (req: Request, res: Response) => {
   const result = await SellService.requestApproval(
     merchant._id.toString(),
     digitalCardCode,
-    promotionId
+    promotionId,
+    totalBill
   );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
-    message: "Approval request sent to user",
+    message: "Approval request simulated successfully",
     data: result,
   });
 });
+
+
+
 
 // User → Get Pending Requests
 const getPendingRequests = catchAsync(async (req: Request, res: Response) => {
