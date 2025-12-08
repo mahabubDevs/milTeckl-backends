@@ -106,8 +106,11 @@ const updatePromotion = catchAsync(async (req: Request, res: Response) => {
     }),
   };
 
-  if (req.files && (req.files as any).image) {
-    payload.image = (req.files as any).image[0].path;
+  // ✅ Fix Image URL Format (same as create)
+  if (req.files && (req.files as any).image && (req.files as any).image[0]) {
+    const file = (req.files as any).image[0];
+    const fileName = file.filename;
+    payload.image = `/images/${fileName}`;
   }
 
   const result = await PromotionService.updatePromotionToDB(
@@ -126,6 +129,7 @@ const updatePromotion = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
 
 const deletePromotion = catchAsync(async (req: Request, res: Response) => {
   const result = await PromotionService.deletePromotionFromDB(req.params.id);
