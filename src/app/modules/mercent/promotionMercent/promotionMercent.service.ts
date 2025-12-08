@@ -1,8 +1,14 @@
+import { StatusCodes } from "http-status-codes";
+import ApiError from "../../../../errors/ApiErrors";
 import QueryBuilder from "../../../../util/queryBuilder";
+import { DigitalCard } from "../../customer/digitalCard/digitalCard.model";
 import { Rating } from "../../customer/rating/rating.model";
 import { User } from "../../user/user.model";
+import { Tier } from "../point&TierSystem/tier.model";
 import { IPromotion } from "./promotionMercent.interface";
 import { Promotion } from "./promotionMercent.model";
+import { Sell } from "../mercentSellManagement/mercentSellManagement.model";
+import { Types } from "mongoose";
 
 const generatePromotionCode = (length = 6) => {
   const chars = "0123456789";
@@ -144,6 +150,75 @@ const getDetailsOfMerchant = async (merchantId: string) => {
     promotions,
   };
 };
+const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
+  // 1. Get user's digital card (points)
+  const digitalCard = await DigitalCard.findOne({
+    userId,
+    merchantId,
+  }).select("availablePoints");
+
+  if (!digitalCard) {
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      "User has no digital card with this merchant"
+    );
+  }
+
+  const availablePoints = digitalCard.availablePoints ?? 0;
+
+  // 2. Calculate total spent for this merchant
+  const spendAgg = await Sell.aggregate([
+    {
+      $match: {
+        userId: new Types.ObjectId(userId),
+        merchantId: new Types.ObjectId(merchantId),
+        status: "completed",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalSpend: { $sum: "$totalBill" },
+      },
+    },
+  ]);
+
+  const totalSpend = spendAgg.length ? spendAgg[0].totalSpend : 0;
+
+  // 3. Get merchant tiers
+  const tiers = await Tier.find({ admin: merchantId }).sort({
+    pointsThreshold: 1,
+    minTotalSpend: 1,
+  });
+
+  if (!tiers.length) {
+    return {
+      availablePoints,
+      totalSpend,
+      tierName: null,
+      rewardText: null,
+    };
+  }
+
+  // 4. Determine user's tier based on both conditions
+  let userTier: any = null;
+
+  for (const tier of tiers) {
+    const meetsPoints = availablePoints >= tier.pointsThreshold;
+    const meetsSpend = totalSpend >= tier.minTotalSpend;
+
+    if (meetsPoints && meetsSpend) {
+      userTier = tier; // keep looping to get the highest eligible tier
+    }
+  }
+
+  return {
+    availablePoints,
+
+    tierName: userTier?.name ?? null,
+    rewardText: userTier?.reward ?? null,
+  };
+};
 
 export const PromotionService = {
   createPromotionToDB,
@@ -154,4 +229,5 @@ export const PromotionService = {
   togglePromotionInDB,
   getPopularMerchantsFromDB,
   getDetailsOfMerchant,
+  getUserTierOfMerchant,
 };

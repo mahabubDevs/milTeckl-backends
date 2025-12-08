@@ -6,6 +6,7 @@ import catchAsync from "../../../../shared/catchAsync";
 import ApiError from "../../../../errors/ApiErrors";
 import sendResponse from "../../../../shared/sendResponse";
 import { IPromotion } from "./promotionMercent.interface";
+import { JwtPayload } from "jsonwebtoken";
 
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   // body data parse
@@ -170,6 +171,22 @@ const getDetailsOfMerchant = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+const getUserTierOfMerchant = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = req.user as JwtPayload;
+    const result = await PromotionService.getUserTierOfMerchant(
+      user._id,
+      req.body.merchantId
+    );
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "User Tier of Merchant fetched successfully",
+      data: result,
+    });
+  }
+);
 export const PromotionController = {
   createPromotion,
   getAllPromotions,
@@ -179,4 +196,5 @@ export const PromotionController = {
   togglePromotion,
   getPopularMerchants,
   getDetailsOfMerchant,
+  getUserTierOfMerchant,
 };

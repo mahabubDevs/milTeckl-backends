@@ -3,8 +3,8 @@ export interface ITier {
   name: string;
   pointsThreshold: number;
   reward: string;
-  accumulationRule: string;
-  redemptionRule: string;
+  accumulationRule: number;
+  redemptionRule: number;
   minTotalSpend: number;
   isActive?: boolean;
   admin: string; // user/admin ID

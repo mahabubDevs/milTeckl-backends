@@ -6,10 +6,19 @@ import fileUploadHandler from "../../../middlewares/fileUploaderHandler";
 import auth from "../../../middlewares/auth";
 import { USER_ROLES } from "../../../../enums/user";
 
+import { PromotionValidations } from "./promotionMercent.validation";
+import validateRequest from "../../../middlewares/validateRequest";
+
 const router = Router();
 
 router.get("/popular-merchants", PromotionController.getPopularMerchants);
 router.get("/merchants/:id", PromotionController.getDetailsOfMerchant);
+router.get(
+  "/users/tier",
+  auth(USER_ROLES.USER),
+  validateRequest(PromotionValidations.getUserTierOfMerchantZodSchema),
+  PromotionController.getUserTierOfMerchant
+);
 
 router.post(
   "/",
