@@ -138,7 +138,7 @@ const getPopularMerchantsFromDB = async () => {
 
 const getDetailsOfMerchant = async (merchantId: string) => {
   const merchant = await User.findById(merchantId)
-    .select("firstName location profile photo about website")
+    .select("firstName location profile photo about website address")
     .lean();
 
   const promotions = await Promotion.find({ merchantId })
