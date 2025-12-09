@@ -45,11 +45,7 @@ const getAllPromotionsFromDB = async (
   query: any = {}
 ): Promise<{ promotions: IPromotion[]; pagination: any }> => {
   const queryBuilder = new QueryBuilder(
-    Promotion.find()
-      .select(
-        "_id name customerSegment discountPercentage startDate endDate status merchantId image"
-      )
-      .populate("merchantId", "website"),
+    Promotion.find({}).populate("merchantId", "website"),
     query
   );
 
@@ -245,8 +241,6 @@ const getPromotionsByUserCategory = async (categoryName: string) => {
     return []; // no merchant found
   }
 
-
-  
   const merchantIds = merchants.map((m) => new Types.ObjectId(m._id));
 
   // 2. Find all promotions from these merchants
@@ -256,8 +250,6 @@ const getPromotionsByUserCategory = async (categoryName: string) => {
 
   return promotions;
 };
-
-
 
 export const PromotionService = {
   createPromotionToDB,

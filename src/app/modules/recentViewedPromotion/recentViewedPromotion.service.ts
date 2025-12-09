@@ -41,8 +41,6 @@ const getRecentViewedFromDB = async (userId: mongoose.Types.ObjectId) => {
     .populate({
       path: "items",
       model: "PromotionMercent",
-      select:
-        "_id name customerSegment discountPercentage startDate endDate status merchantId image",
       populate: {
         path: "merchantId",
         model: "User",
