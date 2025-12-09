@@ -81,7 +81,7 @@ const addPromotionToDigitalCard = async (
   if (!alreadyAdded) {
     digitalCard.promotions.push({
       promotionId: promotionObjectId,
-      status: "unused", // default status
+      status: "pending", // default status
       usedAt: null,
     });
   }

@@ -227,21 +227,31 @@ const getPromotionsByUserCategory = async (categoryName: string) => {
     throw new Error("Category name is required");
   }
 
-  // 1. find merchants whose service/category matches user input
+  // 1. Find all merchants with same category
   const merchants = await User.find(
-    { service: categoryName },
-    { _id: 1 }  // get only IDs
+    {
+      service: { $regex: new RegExp(categoryName, "i") }, // case-insensitive
+    },
+    { _id: 1 }
   );
 
-  const merchantIds = merchants.map((m) => m._id);
+  if (merchants.length === 0) {
+    return []; // no merchant found
+  }
 
-  // 2. find promotions created by these merchants
+
+  
+  const merchantIds = merchants.map((m) => new Types.ObjectId(m._id));
+
+  // 2. Find all promotions from these merchants
   const promotions = await Promotion.find({
-    merchantId: { $in: merchantIds }
-  });
+    merchantId: { $in: merchantIds },
+  }).sort({ createdAt: -1 }); // newest first
 
   return promotions;
 };
+
+
 
 export const PromotionService = {
   createPromotionToDB,

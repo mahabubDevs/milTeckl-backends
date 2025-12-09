@@ -16,6 +16,13 @@ const checkout = async (
 ) => {
   const POINT_CONVERSION_RATE = 0.05; // 1 point = 0.05 currency
 
+  console.log("💠 Checkout Start");
+  console.log("💠 merchantId:", merchantId);
+  console.log("💠 digitalCardCode:", digitalCardCode);
+  console.log("💠 totalBill:", totalBill);
+  console.log("💠 promotionId:", promotionId);
+  console.log("💠 pointRedeemed:", pointRedeemed);
+
   // 1. Find Digital Card
   const digitalCard = await DigitalCard.findOne({
     merchantId: new Types.ObjectId(merchantId),
@@ -25,6 +32,8 @@ const checkout = async (
   if (!digitalCard) {
     throw new Error("Digital Card not found for this merchant");
   }
+
+  console.log("💠 Digital Card Found:", digitalCard._id.toString());
 
   let discount = 0;
   let selectedPromotion: any = null;
@@ -37,7 +46,8 @@ const checkout = async (
       throw new Error("Promotion not found");
     }
 
-    // Find promotion inside digital card
+    console.log("💠 Selected Promotion:", selectedPromotion.name, "-", selectedPromotion.discountPercentage, "%");
+
     const promoIndex = digitalCard.promotions.findIndex(
       p => p.promotionId?.toString() === promotionId
     );
@@ -49,10 +59,10 @@ const checkout = async (
     const promo = digitalCard.promotions[promoIndex];
 
     // Check promotion status
+    console.log("💠 Promotion Status:", promo.status);
     if (promo.status === "unused") {
       promo.status = "used";
       promo.usedAt = new Date();
-
       discount = selectedPromotion.discountPercentage || 0;
     } else if (promo.status === "pending") {
       throw new Error("User approval needed for this promotion");
@@ -61,23 +71,30 @@ const checkout = async (
     }
 
     await digitalCard.save();
+    console.log("💠 Digital Card updated with promotion status");
   }
 
   // 3. Calculate discounted bill
   const discountedBill = totalBill - (totalBill * discount) / 100;
+  console.log("💠 Discount Applied:", discount, "%");
+  console.log("💠 Discounted Bill:", discountedBill);
 
   // 4. Calculate point discount
   const pointDiscount = pointRedeemed * POINT_CONVERSION_RATE;
+  console.log("💠 Point Discount:", pointDiscount);
 
   // 5. Calculate final bill after points redeemed
   const finalBill = discountedBill - pointDiscount;
+  console.log("💠 Final Bill:", finalBill);
 
   // 6. Points earned
   const pointsEarned = discountedBill;
+  console.log("💠 Points Earned:", pointsEarned);
 
   // 7. Update digital card points
   digitalCard.availablePoints = (digitalCard.availablePoints || 0) + pointsEarned;
   await digitalCard.save();
+  console.log("💠 Digital Card Points Updated:", digitalCard.availablePoints);
 
   // 8. Save transaction
   const sell = await Sell.create({
@@ -90,8 +107,11 @@ const checkout = async (
     pointRedeemed,
     pointDiscount,
     finalBill,
-    pointsEarned
+    pointsEarned,
+    status: "completed" // or "pending" if you want to keep original
   });
+
+  console.log("💠 Transaction Saved:", sell._id.toString());
 
   return sell;
 };
