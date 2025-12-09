@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { RecentViewedPromotion } from "./recentViewedPromotion.model";
 
 const LIMIT = 10;
@@ -7,33 +7,48 @@ const addRecentViewedToDB = async (
   userId: mongoose.Types.ObjectId,
   promotionId: mongoose.Types.ObjectId
 ) => {
-  let record = await RecentViewedPromotion.findOne({ userId });
+  const pId = new Types.ObjectId(promotionId);
 
-  if (!record) {
-    return RecentViewedPromotion.create({
-      userId,
-      items: [{ promotionId }],
-    });
-  }
-
-  // Remove if already exists
-  record.items = record.items.filter(
-    (i) => i.promotionId.toString() !== promotionId.toString()
+  await RecentViewedPromotion.updateOne(
+    { userId },
+    { $pull: { items: pId } },
+    { upsert: true }
   );
 
-  // Add to beginning (most recent)
-  record.items.unshift({ promotionId });
+  const updated = await RecentViewedPromotion.findOneAndUpdate(
+    { userId },
+    {
+      $push: {
+        items: {
+          $each: [pId],
+          $position: 0,
+        },
+      },
+    },
+    { upsert: true, new: true }
+  );
 
-  // Limit to last 10 items
-  record.items = record.items.slice(0, LIMIT);
+  if (updated.items.length > LIMIT) {
+    updated.items = updated.items.slice(0, LIMIT);
+    await updated.save();
+  }
 
-  await record.save();
-  return record;
+  return updated;
 };
 
 const getRecentViewedFromDB = async (userId: mongoose.Types.ObjectId) => {
   const record = await RecentViewedPromotion.findOne({ userId })
-    .populate("items.promotionId")
+    .populate({
+      path: "items",
+      model: "PromotionMercent",
+      select:
+        "_id name customerSegment discountPercentage startDate endDate status merchantId",
+      populate: {
+        path: "merchantId",
+        model: "User",
+        select: "website",
+      },
+    })
     .lean();
 
   return record?.items || [];

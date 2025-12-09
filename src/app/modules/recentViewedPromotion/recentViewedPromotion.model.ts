@@ -10,10 +10,8 @@ const recentViewedPromotionSchema = new mongoose.Schema<IRecentViewedPromotion>(
     },
     items: [
       {
-        promotionId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "PromotionMercent",
-        },
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PromotionMercent",
       },
     ],
   },
