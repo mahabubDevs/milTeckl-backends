@@ -191,6 +191,26 @@ const getUserTierOfMerchant = catchAsync(
     });
   }
 );
+
+
+//catagory show pro
+
+const getPromotionsByUserCategory = catchAsync(
+  async (req: Request, res: Response) => {
+    const { categoryName } = req.query; // user sends ?categoryName=restaurant
+
+    const promotions = await PromotionService.getPromotionsByUserCategory(
+      String(categoryName)
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Promotions fetched successfully",
+      data: promotions,
+    });
+  }
+);
+
 export const PromotionController = {
   createPromotion,
   getAllPromotions,
@@ -201,4 +221,5 @@ export const PromotionController = {
   getPopularMerchants,
   getDetailsOfMerchant,
   getUserTierOfMerchant,
+  getPromotionsByUserCategory
 };

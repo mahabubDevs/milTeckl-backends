@@ -11,8 +11,10 @@ const checkout = async (
   merchantId: string,
   digitalCardCode: string,
   totalBill: number,
-  promotionId?: string
+  promotionId?: string,
+  pointRedeemed: number = 0 // optional points redeemed
 ) => {
+  const POINT_CONVERSION_RATE = 0.05; // 1 point = 0.05 currency
 
   // 1. Find Digital Card
   const digitalCard = await DigitalCard.findOne({
@@ -64,14 +66,20 @@ const checkout = async (
   // 3. Calculate discounted bill
   const discountedBill = totalBill - (totalBill * discount) / 100;
 
-  // 4. Points earned
+  // 4. Calculate point discount
+  const pointDiscount = pointRedeemed * POINT_CONVERSION_RATE;
+
+  // 5. Calculate final bill after points redeemed
+  const finalBill = discountedBill - pointDiscount;
+
+  // 6. Points earned
   const pointsEarned = discountedBill;
 
-  // 5. Update digital card points
+  // 7. Update digital card points
   digitalCard.availablePoints = (digitalCard.availablePoints || 0) + pointsEarned;
   await digitalCard.save();
 
-  // 6. Save transaction
+  // 8. Save transaction
   const sell = await Sell.create({
     merchantId,
     userId: digitalCard.userId,
@@ -79,11 +87,16 @@ const checkout = async (
     promotionId: selectedPromotion?._id,
     totalBill,
     discountedBill,
+    pointRedeemed,
+    pointDiscount,
+    finalBill,
     pointsEarned
   });
 
   return sell;
 };
+
+
 
 
 // -----------------------------
@@ -126,8 +139,11 @@ const requestApproval = async (
   merchantId: string,
   digitalCardCode: string,
   promotionId: string,
-  totalBill: number = 100 // default value, user input দিলে সেটা নেবে
+  pointRedeemed: number = 0,
+  totalBill: number = 0 // default value, user input দিলে সেটা নেবে
 ) => {
+  const POINT_CONVERSION_RATE = 0.05; // 1 point = 0.05 currency
+
   // 1. Find Digital Card
   const digitalCard = await DigitalCard.findOne({
     merchantId: new Types.ObjectId(merchantId),
@@ -158,10 +174,16 @@ const requestApproval = async (
   // 4. Simulate discounted bill
   const discountedBill = totalBill - (totalBill * discount) / 100;
 
-  // 5. Simulate points earned
+  // 5. Calculate redeemed points discount
+  const pointDiscount = pointRedeemed * POINT_CONVERSION_RATE;
+
+  // 6. Calculate final bill
+  const finalBill = discountedBill - pointDiscount;
+
+  // 7. Simulate points earned
   const pointsEarned = discountedBill;
 
-  // 6. Return simulated response
+  // 8. Return simulated response
   return {
     merchantId,
     userId: digitalCard.userId,
@@ -169,9 +191,13 @@ const requestApproval = async (
     promotionId,
     totalBill,
     discountedBill,
+    pointRedeemed,
+    pointDiscount,
+    finalBill,
     pointsEarned,
   };
 };
+
 
 // -----------------------------
 const getPendingRequests = async (userId: string) => {

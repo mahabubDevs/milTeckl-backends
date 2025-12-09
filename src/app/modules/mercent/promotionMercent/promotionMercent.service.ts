@@ -220,6 +220,29 @@ const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
   };
 };
 
+
+//catagory based promotion fetching
+const getPromotionsByUserCategory = async (categoryName: string) => {
+  if (!categoryName) {
+    throw new Error("Category name is required");
+  }
+
+  // 1. find merchants whose service/category matches user input
+  const merchants = await User.find(
+    { service: categoryName },
+    { _id: 1 }  // get only IDs
+  );
+
+  const merchantIds = merchants.map((m) => m._id);
+
+  // 2. find promotions created by these merchants
+  const promotions = await Promotion.find({
+    merchantId: { $in: merchantIds }
+  });
+
+  return promotions;
+};
+
 export const PromotionService = {
   createPromotionToDB,
   updatePromotionToDB,
@@ -230,4 +253,5 @@ export const PromotionService = {
   getPopularMerchantsFromDB,
   getDetailsOfMerchant,
   getUserTierOfMerchant,
+  getPromotionsByUserCategory
 };
