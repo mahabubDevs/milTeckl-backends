@@ -31,5 +31,10 @@ router.get(
   auth(USER_ROLES.MERCENT),
   DashboardMercentController.getCustomerChart
 );
+router.get(
+  "/customer-chart-week",
+  auth(USER_ROLES.MERCENT),
+  DashboardMercentController.getCustomerChartWeek
+);
 
 export const DashboardMercentRoutes = router;

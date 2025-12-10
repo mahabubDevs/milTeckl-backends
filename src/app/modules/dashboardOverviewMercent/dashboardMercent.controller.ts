@@ -98,6 +98,24 @@ const getCustomerChart = catchAsync(async (req, res) => {
     data: result,
   });
 });
+const getCustomerChartWeek = catchAsync(async (req, res) => {
+  const merchantId = (req.user as any)._id;
+
+  const { startDate, endDate } = req.query;
+
+  const result = await DashboardMercentService.getCustomerChartWeek(
+    merchantId,
+    startDate as string,
+    endDate as string
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Customer chart data fetched successfully",
+    data: result,
+  });
+});
 
 export const DashboardMercentController = {
   getTotalRevenue,
@@ -106,5 +124,6 @@ export const DashboardMercentController = {
   getMerchantReport,
   getWeeklySellReport,
   getTodayNewMembers,
+  getCustomerChartWeek,
   getCustomerChart,
 };

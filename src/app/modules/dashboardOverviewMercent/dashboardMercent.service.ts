@@ -428,6 +428,70 @@ const getCustomerChart = async (merchantId: string, year?: number) => {
 
   return formatted;
 };
+
+const getCustomerChartWeek = async (
+  merchantId: string,
+  startDate: string,
+  endDate: string
+) => {
+  const from = new Date(startDate);
+  const to = new Date(endDate);
+
+  const pipeline = [
+    {
+      $match: {
+        merchantId: new mongoose.Types.ObjectId(merchantId),
+        createdAt: { $gte: from, $lte: to },
+      },
+    },
+
+    {
+      $group: {
+        _id: {
+          year: { $year: "$createdAt" },
+          month: { $month: "$createdAt" },
+          day: { $dayOfMonth: "$createdAt" },
+        },
+        totalRevenue: { $sum: "$discountedBill" },
+      },
+    },
+
+    {
+      $sort: {
+        "_id.year": 1,
+        "_id.month": 1,
+        "_id.day": 1,
+      } as any,
+    },
+  ];
+
+  const data = await Sell.aggregate(pipeline);
+
+  // ---- format into a full 7-day series ----
+  const days = [];
+  const current = new Date(from);
+
+  while (current <= to) {
+    const y = current.getFullYear();
+    const m = current.getMonth() + 1;
+    const d = current.getDate();
+
+    const found = data.find(
+      (item) =>
+        item._id.year === y && item._id.month === m && item._id.day === d
+    );
+
+    days.push({
+      date: current.toISOString().slice(0, 10),
+      revenue: found?.totalRevenue || 0,
+    });
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
+};
+
 export const DashboardMercentService = {
   getReportForMerchantDashboard,
   getWeeklySellReport,
@@ -436,4 +500,5 @@ export const DashboardMercentService = {
   getYearlyRevenue,
   getTodayNewMembers,
   getCustomerChart,
+  getCustomerChartWeek,
 };
