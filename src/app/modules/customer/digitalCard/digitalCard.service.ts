@@ -124,10 +124,8 @@ const getUserAddedPromotions = async (
       },
     },
 
-    // Unwind promotions array
     { $unwind: "$promotions" },
 
-    // Lookup promotion details
     {
       $lookup: {
         from: "promotionmercents",
@@ -136,10 +134,20 @@ const getUserAddedPromotions = async (
         as: "promotion",
       },
     },
-
     { $unwind: "$promotion" },
 
-    // SEARCH by promotion name
+    // Lookup merchant to get businessName
+    {
+      $lookup: {
+        from: "users",
+        localField: "promotion.merchantId",
+        foreignField: "_id",
+        as: "merchant",
+      },
+    },
+    { $unwind: "$merchant" },
+
+    // Search
     searchTerm
       ? {
           $match: {
@@ -148,7 +156,6 @@ const getUserAddedPromotions = async (
         }
       : { $match: {} },
 
-    // facet for pagination + total count
     {
       $facet: {
         metadata: [{ $count: "total" }],
@@ -164,6 +171,7 @@ const getUserAddedPromotions = async (
               status: "$promotions.status",
               usedAt: "$promotions.usedAt",
               promotion: "$promotion",
+              merchantBusinessName: "$merchant.businessName",
             },
           },
         ],
