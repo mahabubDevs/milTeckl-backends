@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { Sell } from "../mercent/mercentSellManagement/mercentSellManagement.model";
-const getCustomerAnalytics = async (
+const getBusinessCustomerAnalytics = async (
   merchantId: string,
   startDate?: string,
   endDate?: string,
@@ -138,4 +138,7 @@ const getMerchantAnalytics = async (
     records,
   };
 };
-export const AnalyticsService = { getCustomerAnalytics, getMerchantAnalytics };
+export const AnalyticsService = {
+  getBusinessCustomerAnalytics,
+  getMerchantAnalytics,
+};
