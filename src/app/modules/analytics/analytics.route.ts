@@ -16,4 +16,11 @@ router.get(
   auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AnalyticsController.getMerchantAnalytics
 );
+
+router.get(
+  "/customer",
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  AnalyticsController.getCustomerAnalytics
+);
+
 export const AnalyticsRoutes = router;

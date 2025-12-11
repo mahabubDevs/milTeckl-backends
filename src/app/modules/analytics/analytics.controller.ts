@@ -48,7 +48,27 @@ const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate, page = "1", limit = "10" } = req.query;
+
+  const result = await AnalyticsService.getCustomerAnalytics(
+    startDate as string,
+    endDate as string,
+    Number(page),
+    Number(limit)
+  );
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: "Customer analytics fetched successfully",
+    data: result.records,
+    pagination: result.pagination,
+  });
+});
+
 export const AnalyticsController = {
   getBusinessCustomerAnalytics,
   getMerchantAnalytics,
+  getCustomerAnalytics,
 };
