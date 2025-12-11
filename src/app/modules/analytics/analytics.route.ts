@@ -8,7 +8,7 @@ const router = express.Router();
 router.get(
   "/business-customer",
   auth(USER_ROLES.MERCENT),
-  AnalyticsController.getCustomerAnalytics
+  AnalyticsController.getBusinessCustomerAnalytics
 );
 
 router.get(

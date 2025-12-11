@@ -56,6 +56,22 @@ const getAllPromotionsFromDB = async (
 
   return { pagination, promotions };
 };
+const getAllPromotionsOfAMerchant = async (
+  merchantId: string,
+  query: any = {}
+): Promise<{ promotions: IPromotion[]; pagination: any }> => {
+  const queryBuilder = new QueryBuilder(
+    Promotion.find({ merchantId }).populate("merchantId", "website"),
+    query
+  );
+
+  queryBuilder.search(["name"]).filter().sort().paginate().fields();
+
+  const promotions = await queryBuilder.modelQuery;
+  const pagination = await queryBuilder.getPaginationInfo();
+
+  return { pagination, promotions };
+};
 
 const getSinglePromotionFromDB = async (
   id: string
@@ -262,4 +278,5 @@ export const PromotionService = {
   getDetailsOfMerchant,
   getUserTierOfMerchant,
   getPromotionsByUserCategory,
+  getAllPromotionsOfAMerchant,
 };

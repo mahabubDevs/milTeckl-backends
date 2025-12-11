@@ -72,6 +72,22 @@ const getAllPromotions = catchAsync(async (req: Request, res: Response) => {
     pagination: result.pagination,
   });
 });
+const getAllPromotionsOfAMerchant = catchAsync(
+  async (req: Request, res: Response) => {
+    const user = req.user as JwtPayload;
+    const result = await PromotionService.getAllPromotionsOfAMerchant(
+      user._id,
+      req.query
+    );
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Promotions retrieved successfully",
+      data: result.promotions,
+      pagination: result.pagination,
+    });
+  }
+);
 
 const getSinglePromotion = catchAsync(async (req: Request, res: Response) => {
   const result = await PromotionService.getSinglePromotionFromDB(req.params.id);
@@ -129,7 +145,6 @@ const updatePromotion = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
-
 
 const deletePromotion = catchAsync(async (req: Request, res: Response) => {
   const result = await PromotionService.deletePromotionFromDB(req.params.id);
@@ -192,7 +207,6 @@ const getUserTierOfMerchant = catchAsync(
   }
 );
 
-
 //catagory show pro
 
 const getPromotionsByUserCategory = catchAsync(
@@ -221,5 +235,6 @@ export const PromotionController = {
   getPopularMerchants,
   getDetailsOfMerchant,
   getUserTierOfMerchant,
-  getPromotionsByUserCategory
+  getPromotionsByUserCategory,
+  getAllPromotionsOfAMerchant,
 };

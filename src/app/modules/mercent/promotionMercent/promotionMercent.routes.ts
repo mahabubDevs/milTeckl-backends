@@ -14,11 +14,18 @@ const router = Router();
 router.get("/popular-merchants", PromotionController.getPopularMerchants);
 // catagory routes can be added here in future
 
-router.get("/by-category", auth(), PromotionController.getPromotionsByUserCategory);
-
-
+router.get(
+  "/by-category",
+  auth(),
+  PromotionController.getPromotionsByUserCategory
+);
 
 router.get("/merchants/:id", PromotionController.getDetailsOfMerchant);
+router.get(
+  "/merchants",
+  auth(USER_ROLES.MERCENT),
+  PromotionController.getAllPromotionsOfAMerchant
+);
 router.get(
   "/users/tier",
   auth(),
@@ -55,11 +62,5 @@ router.patch(
   auth(USER_ROLES.MERCENT),
   PromotionController.togglePromotion
 );
-
-
-
-
-
-
 
 export const PromoMercentRoutes = router;
