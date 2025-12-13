@@ -4,10 +4,10 @@ import config from "./config";
 import { errorLogger, logger } from "./shared/logger";
 import colors from "colors";
 // import { setupWebSocket } from "./helpers/socketHelper";
-import  { setupWebSocketServer }  from "./realTimeComminucation/ws.server";
+import { setupWebSocketServer } from "./realTimeComminucation/ws.server";
 import { Server } from "socket.io";
 import seedSuperAdmin from "./DB";
-
+import { socketHelper } from "./helpers/socketHelper";
 
 // uncaught exception
 process.on("uncaughtException", (error) => {
@@ -36,15 +36,15 @@ async function main() {
       );
     });
 
-    // socket.io
+    //socket
     const io = new Server(server, {
       pingTimeout: 60000,
-      cors: { origin: "*" },
+      cors: {
+        origin: "*",
+      },
     });
 
-    // const WS_PORT = 5003;
-    setupWebSocketServer(server)
-// WebSocketServerserver);
+    socketHelper.socket(io);
     //@ts-ignore
     global.io = io;
   } catch (error) {
@@ -66,8 +66,6 @@ async function main() {
 }
 
 // clustering logic
-
-
 
 main();
 

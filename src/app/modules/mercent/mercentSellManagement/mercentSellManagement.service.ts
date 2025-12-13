@@ -4,7 +4,6 @@ import { DigitalCard } from "../../customer/digitalCard/digitalCard.model";
 import { Sell } from "./mercentSellManagement.model";
 import { RequestApprovalOptions } from "./mercentSellManagement.interface";
 
-
 // -----------------------------
 // 1. Merchant → Checkout
 // -----------------------------
@@ -27,7 +26,7 @@ const checkout = async (
   // 1. Find Digital Card
   const digitalCard = await DigitalCard.findOne({
     merchantId: new Types.ObjectId(merchantId),
-    cardCode: digitalCardCode
+    cardCode: digitalCardCode,
   });
 
   if (!digitalCard) {
@@ -47,10 +46,16 @@ const checkout = async (
       throw new Error("Promotion not found");
     }
 
-    console.log("💠 Selected Promotion:", selectedPromotion.name, "-", selectedPromotion.discountPercentage, "%");
+    console.log(
+      "💠 Selected Promotion:",
+      selectedPromotion.name,
+      "-",
+      selectedPromotion.discountPercentage,
+      "%"
+    );
 
     const promoIndex = digitalCard.promotions.findIndex(
-      p => p.promotionId?.toString() === promotionId
+      (p) => p.promotionId?.toString() === promotionId
     );
 
     if (promoIndex === -1) {
@@ -93,7 +98,8 @@ const checkout = async (
   console.log("💠 Points Earned:", pointsEarned);
 
   // 7. Update digital card points
-  digitalCard.availablePoints = (digitalCard.availablePoints || 0) + pointsEarned;
+  digitalCard.availablePoints =
+    (digitalCard.availablePoints || 0) + pointsEarned;
   await digitalCard.save();
   console.log("💠 Digital Card Points Updated:", digitalCard.availablePoints);
 
@@ -109,16 +115,13 @@ const checkout = async (
     pointDiscount,
     finalBill,
     pointsEarned,
-    status: "completed" // or "pending" if you want to keep original
+    status: "completed", // or "pending" if you want to keep original
   });
 
   console.log("💠 Transaction Saved:", sell._id.toString());
 
   return sell;
 };
-
-
-
 
 // -----------------------------
 // 2. Merchant → Request Approval
@@ -204,8 +207,7 @@ const requestApproval = async ({
   // 7. Simulate points earned
   const pointsEarned = discountedBill;
 
-  // 8. Return simulated response
-  return {
+  const formattedData = {
     merchantId,
     userId: digitalCard.userId,
     digitalCardId: digitalCard._id,
@@ -217,14 +219,19 @@ const requestApproval = async ({
     finalBill,
     pointsEarned,
   };
+  const io = (global as any).io;
+  if (io) {
+    io.emit(`getApplyRequest::${digitalCard.userId}`, formattedData);
+  }
+  // 8. Return simulated response
+  return formattedData;
 };
-
 
 // -----------------------------
 const getPendingRequests = async (userId: string) => {
   const cards = await DigitalCard.find({
     userId: new Types.ObjectId(userId),
-    "promotions.status": "pending"
+    "promotions.status": "pending",
   });
 
   interface PendingRequest {
@@ -234,13 +241,13 @@ const getPendingRequests = async (userId: string) => {
   }
 
   const requests: PendingRequest[] = [];
-  cards.forEach(card => {
-    card.promotions.forEach(p => {
+  cards.forEach((card) => {
+    card.promotions.forEach((p) => {
       if (p.status === "pending") {
         requests.push({
           digitalCardId: card._id,
           promotionId: p.promotionId,
-          cardCode: card.cardCode
+          cardCode: card.cardCode,
         });
       }
     });
@@ -256,7 +263,6 @@ const approvePromotion = async (
   promotionId: string,
   userId: string
 ) => {
-
   const digitalCard = await DigitalCard.findOne({
     _id: new Types.ObjectId(digitalCardId),
     userId: new Types.ObjectId(userId),
@@ -286,13 +292,11 @@ const approvePromotion = async (
   return { status: "approved" };
 };
 
-
 const approvePromotionReject = async (
   digitalCardId: string,
   promotionId: string,
   userId: string
 ) => {
-
   const digitalCard = await DigitalCard.findOne({
     _id: new Types.ObjectId(digitalCardId),
     userId: new Types.ObjectId(userId),
@@ -322,8 +326,6 @@ const approvePromotionReject = async (
   return { status: "reject" };
 };
 
-
-
 const getPointsHistory = async (
   digitalCardId: string,
   type: "all" | "earn" | "redeem" = "all"
@@ -336,25 +338,25 @@ const getPointsHistory = async (
   const history = await Sell.find(query).sort({ createdAt: -1 });
 
   // map করে front-end friendly format বানাচ্ছি
-  return history.map(tx => ({
+  return history.map((tx) => ({
     transactionId: tx._id,
     totalBill: tx.totalBill,
     discountedBill: tx.discountedBill,
     points: tx.pointsEarned,
     promotionId: tx.promotionId,
     status: tx.status,
-    date: tx.createdAt
+    date: tx.createdAt,
   }));
 };
 
 // -----------------------------
 // EXPORT SERVICE
 // -----------------------------
-export const SellService = { 
+export const SellService = {
   checkout,
   requestApproval,
   getPendingRequests,
   approvePromotion,
   approvePromotionReject,
-  getPointsHistory
+  getPointsHistory,
 };
