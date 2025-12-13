@@ -328,14 +328,21 @@ const approvePromotionReject = async (
 
 const getPointsHistory = async (
   digitalCardId: string,
-  type: "all" | "earn" | "redeem" = "all"
+  type: "all" | "earn" | "use" = "all"
 ) => {
+  // Validate ObjectId
+  if (!Types.ObjectId.isValid(digitalCardId)) {
+    throw new Error("Invalid digitalCardId");
+  }
+
   const query: any = { digitalCardId: new Types.ObjectId(digitalCardId) };
 
+  // type অনুযায়ী filter
   if (type === "earn") query.pointsEarned = { $gt: 0 };
-  if (type === "redeem") query.pointsEarned = { $lt: 0 };
+  if (type === "use") query.pointsEarned = { $lt: 0 };
 
   const history = await Sell.find(query).sort({ createdAt: -1 });
+
 
   // map করে front-end friendly format বানাচ্ছি
   return history.map((tx) => ({
@@ -347,7 +354,76 @@ const getPointsHistory = async (
     status: tx.status,
     date: tx.createdAt,
   }));
+
+  const result: any[] = [];
+
+  // history.forEach(tx => {
+  //   // যদি earn points থাকে
+  //   if (tx.pointsEarned > 0) {
+  //     result.push({
+  //       id: tx._id,
+  //       earn: tx.pointsEarned,
+  //       date: tx.createdAt,
+  //       merchant: tx.merchantId
+  //     });
+  //   }
+  //   // যদি redeem/use points থাকে
+  //   if (tx.pointsEarned < 0) {
+  //     result.push({
+  //       id: tx._id,
+  //       use: Math.abs(tx.pointsEarned),
+  //       date: tx.createdAt,
+  //       merchant: tx.merchantId
+  //     });
+  //   }
+  // });
+
+
+ if (history.length > 0) {
+    // আসল database data mapping
+    history.forEach(tx => {
+      if (tx.pointsEarned > 0 && (type === "all" || type === "earn")) {
+        result.push({
+          id: tx._id,
+          earn: tx.pointsEarned,
+          date: tx.createdAt,
+          merchant: tx.merchantId
+        });
+      }
+      if (tx.pointsEarned < 0 && (type === "all" || type === "use")) {
+        result.push({
+          id: tx._id,
+          use: Math.abs(tx.pointsEarned),
+          date: tx.createdAt,
+          merchant: tx.merchantId
+        });
+      }
+    });
+  } else {
+    // যদি কোনো data না থাকে → dummy/testing data
+    if (type === "all" || type === "earn") {
+      result.push({
+        id: "dummy1",
+        earn: 100,
+        date: new Date(),
+        merchant: "Test Merchant A"
+      });
+    }
+    if (type === "all" || type === "use") {
+      result.push({
+        id: "dummy2",
+        use: 50,
+        date: new Date(),
+        merchant: "Test Merchant B"
+      });
+    }
+  }
+
+
+  return result;
+
 };
+
 
 // -----------------------------
 // EXPORT SERVICE

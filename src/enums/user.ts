@@ -3,6 +3,8 @@ export enum USER_ROLES {
   SUPER_ADMIN = "SUPER_ADMIN",
   USER = "USER",
   MERCENT = "MERCENT",
+  ADMIN_REP = "ADMIN_REP",
+  ADMIN_SELL = "ADMIN_SELL",
 }
 
 export enum USER_STATUS {

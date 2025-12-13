@@ -226,6 +226,26 @@ const approvePromotionreject = catchAsync(async (req: Request, res: Response) =>
 
 
 
+// const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
+//   const user = req.user as IUser;
+//   const { digitalCardId, type } = req.query;
+
+//   if (!user._id) {
+//     return sendResponse(res, {
+//       statusCode: StatusCodes.BAD_REQUEST,
+//       success: false,
+//       message: "User ID not found",
+//     });
+//   }
+
+//   if (!digitalCardId) {
+//     return sendResponse(res, {
+//       statusCode: StatusCodes.BAD_REQUEST,
+//       success: false,
+//       message: "digitalCardId is required",
+//     });
+//   }
+
 const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as IUser;
   const { digitalCardId, type } = req.query;
@@ -248,7 +268,7 @@ const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
 
   const history = await SellService.getPointsHistory(
     digitalCardId.toString(),
-    (type as "all" | "earn" | "redeem") || "all"
+    (type as "all" | "earn" | "use") || "all"
   );
 
   sendResponse(res, {
@@ -258,6 +278,8 @@ const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
     data: history,
   });
 });
+
+
 
 export default { 
   checkout ,

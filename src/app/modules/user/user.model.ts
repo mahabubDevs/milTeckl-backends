@@ -19,7 +19,7 @@ const userSchema = new Schema<IUser, UserModal>(
       type: String,
       index: true,
       unique: true,
-      required: true,
+      required: false,
     },
     firstName: {
       type: String,
@@ -45,7 +45,7 @@ const userSchema = new Schema<IUser, UserModal>(
     referenceId: {
       type: String,
       unique: true,
-      required: true,
+      required: false,
     },
     role: {
       type: String,
