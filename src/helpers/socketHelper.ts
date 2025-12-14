@@ -8,6 +8,10 @@ const socket = (io: Server) => {
     // User is now online
     logger.info(colors.blue("A user connected"));
 
+    const userId = socket.handshake.query.userId;
+
+    if (!userId) return;
+
     //disconnect
     socket.on("disconnect", () => {
       logger.info(colors.red("A user disconnect"));
