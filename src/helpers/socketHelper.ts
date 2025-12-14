@@ -5,10 +5,11 @@ import { User } from "../app/modules/user/user.model";
 
 const socket = (io: Server) => {
   io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userId;
+    const token =
+      socket.handshake.auth?.token || socket.handshake.headers.token;
 
-    if (!userId) {
-      socket.emit("auth_error", "User ID is required");
+    if (!token) {
+      socket.emit("auth_error", "token is required");
 
       setTimeout(() => {
         socket.disconnect();
