@@ -9,6 +9,7 @@ import { IPromotion } from "./promotionMercent.interface";
 import { Promotion } from "./promotionMercent.model";
 import { Sell } from "../mercentSellManagement/mercentSellManagement.model";
 import { Types } from "mongoose";
+import { sendNotification } from "../../../../helpers/notificationsHelper";
 
 const generatePromotionCode = (length = 6) => {
   const chars = "0123456789";
@@ -86,8 +87,8 @@ const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number)
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
@@ -107,13 +108,13 @@ const getUserSegment = async (userId: string) => {
   const avgSpend = 1000;
 
   let segment: string;
-  if (totalPurchases === 0 || (totalPurchases === 1 && purchases[0].createdAt > new Date(Date.now() - 30*24*60*60*1000))) {
+  if (totalPurchases === 0 || (totalPurchases === 1 && purchases[0].createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) {
     segment = "new_customer";
   } else if (totalPurchases >= 2 && last6MonthsPurchases.length < 5) {
     segment = "returning_customer";
   } else if (last6MonthsPurchases.length >= 5 || totalSpend >= 1.5 * avgSpend) {
     segment = "loyal_customer";
-  } else if (last6MonthsPurchases.length >= 20 || totalSpend >= 3*avgSpend) {
+  } else if (last6MonthsPurchases.length >= 20 || totalSpend >= 3 * avgSpend) {
     segment = "vip_customer";
   } else {
     segment = "all_customer";
@@ -330,8 +331,8 @@ export const PromotionService = {
   getUserTierOfMerchant,
   getPromotionsByUserCategory,
 
-getUserSegment,
-getAllPromotionsOfAMerchant,
+  getUserSegment,
+  getAllPromotionsOfAMerchant,
 };
 
 

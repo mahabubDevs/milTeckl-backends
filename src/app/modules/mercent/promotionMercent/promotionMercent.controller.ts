@@ -8,6 +8,8 @@ import sendResponse from "../../../../shared/sendResponse";
 import { IPromotion } from "./promotionMercent.interface";
 import { JwtPayload } from "jsonwebtoken";
 import { Promotion } from "./promotionMercent.model";
+import { sendNotification } from "../../../../helpers/notificationsHelper";
+import { NotificationType } from "../../notification/notification.model";
 
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   // body data parse
@@ -50,11 +52,19 @@ const createPromotion = catchAsync(async (req: Request, res: Response) => {
     availableDays,
     endDate: new Date(endDate),
     image: imageUrl,
-    merchantId, // ✅ save merchantId in DB
+    merchantId,
   };
 
   const result = await PromotionService.createPromotionToDB(payload);
 
+  if (result) {
+    await sendNotification({
+      userIds: [result.merchantId],
+      title: "Congratulations! promotion published",
+      body: `Your promotion "${name}" has been published successfully`,
+      type: NotificationType.PROMOTION,
+    })
+  }
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
