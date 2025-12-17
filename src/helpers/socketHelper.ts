@@ -1,28 +1,59 @@
+import { Server, Socket } from "socket.io";
 import colors from "colors";
-import { Server } from "socket.io";
-import { logger } from "../shared/logger";
+import { Secret } from "jsonwebtoken";
+import config from "../config";
+import { jwtHelper } from "./jwtHelper";
 import { User } from "../app/modules/user/user.model";
+import { logger } from "../shared/logger";
 
 const socket = (io: Server) => {
-  io.on("connection", (socket) => {
-    const token =
-      socket.handshake.auth?.token || socket.handshake.headers.token;
+  io.on("connection", async (socket: Socket) => {
+    try {
+      const token =
+        socket.handshake.auth?.token ||
+        (socket.handshake.headers.token as string);
 
-    if (!token) {
-      socket.emit("auth_error", "token is required");
+      if (!token) {
+        socket.emit("auth_error", "Authentication token required");
+        return socket.disconnect(true);
+      }
 
-      setTimeout(() => {
-        socket.disconnect();
-      }, 100);
-      return;
+      const extractedToken = token.startsWith("Bearer ")
+        ? token.slice(7)
+        : token;
+
+      const verifiedUser = jwtHelper.verifyToken(
+        extractedToken,
+        config.jwt.jwt_secret as Secret
+      );
+
+      if (!verifiedUser?._id) {
+        socket.emit("auth_error", "Invalid token");
+        return socket.disconnect(true);
+      }
+
+      // attach user info to socket (very important)
+      socket.data.userId = verifiedUser._id;
+
+      await User.findByIdAndUpdate(verifiedUser._id, {
+        $addToSet: { socketIds: socket.id },
+      });
+
+      logger.info(colors.blue(`User connected: ${verifiedUser._id}`));
+
+      socket.on("disconnect", async () => {
+        await User.findByIdAndUpdate(socket.data.userId, {
+          $pull: { socketIds: socket.id },
+        });
+
+        logger.info(colors.red(`User disconnected: ${socket.data.userId}`));
+      });
+    } catch (error) {
+      logger.error(error);
+      socket.emit("auth_error", "Authentication failed");
+      socket.disconnect(true);
     }
-    // User is now online
-    logger.info(colors.blue("A user connected"));
-
-    //disconnect
-    socket.on("disconnect", () => {
-      logger.info(colors.red("A user disconnect"));
-    });
   });
 };
+
 export const socketHelper = { socket };

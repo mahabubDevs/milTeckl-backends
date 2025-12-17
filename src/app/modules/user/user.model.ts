@@ -189,6 +189,7 @@ const userSchema = new Schema<IUser, UserModal>(
     // },
 
     lastActive: { type: Date, default: new Date() },
+    socketIds: { type: [String], default: [] },
   },
   {
     timestamps: true,

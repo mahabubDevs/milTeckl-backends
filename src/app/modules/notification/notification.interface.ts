@@ -1,13 +1,17 @@
 import { Model, Types } from "mongoose";
-import { NOTIFICATION_TYPE } from "./notification.constants";
+import { NotificationType } from "./notification.model";
 
 export interface INotification {
-  type: NOTIFICATION_TYPE;
+  userId: Types.ObjectId;
   title: string;
-  message: string;
-  receiver: Types.ObjectId;
-  referenceId?: string;
-  isRead?: boolean;
+  body: string;
+  type: NotificationType;
+  isRead: boolean;
+  attachments?: string[];
+  channel?: {
+    socket?: boolean;
+    push?: boolean;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }

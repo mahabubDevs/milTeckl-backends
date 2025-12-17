@@ -11,16 +11,14 @@ const getUserNotificationFromDB = async (
   query: FilterQuery<any>
 ) => {
   const notificationQuery = new QueryBuilder(
-    Notification.find({ receiver: user.id })
-      .select("type title message isRead createdAt referenceId")
-      .sort("-createdAt"),
+    Notification.find({ receiver: user._id }).sort("-createdAt"),
     query
   ).paginate();
 
   const [notifications, pagination, unreadCount] = await Promise.all([
     notificationQuery.modelQuery.lean().exec(),
     notificationQuery.getPaginationInfo(),
-    Notification.countDocuments({ receiver: user.id, isRead: false }),
+    Notification.countDocuments({ userId: user._id, isRead: false }),
   ]);
 
   return {
@@ -42,7 +40,7 @@ const readUserNotificationToDB = async (user: JwtPayload): Promise<boolean> => {
   await Notification.bulkWrite([
     {
       updateMany: {
-        filter: { receiver: user.id, isRead: false },
+        filter: { userId: user._id, isRead: false },
         update: { $set: { isRead: true } },
         upsert: false,
       },
