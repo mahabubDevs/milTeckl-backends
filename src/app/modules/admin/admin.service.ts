@@ -4,6 +4,8 @@ import { User } from "../user/user.model";
 import { APPROVE_STATUS, USER_ROLES, USER_STATUS } from "../../../enums/user";
 import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
 
 const createAdminToDB = async (payload: IUser): Promise<IUser> => {
   const createAdmin: any = await User.create(payload);
@@ -208,6 +210,15 @@ const updateMerchantApproveStatus = async (
 
   if (!merchant) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
+
+  if (approveStatus === APPROVE_STATUS.APPROVED) {
+    await sendNotification({
+      userIds: [merchant._id],
+      title: "Congratulations! Your account Approved",
+      body: `Welcome ${merchant.firstName}, Your account has been approved successfully`,
+      type: NotificationType.WELCOME,
+    })
   }
 
   return merchant;
