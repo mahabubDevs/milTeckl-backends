@@ -29,13 +29,13 @@ const socket = (io: Server) => {
       }
 
       // attach user info to socket (very important)
-      socket.data.userId = verifiedUser._id;
+      socket.data.userId = verifiedUser.id;
 
-      await User.findByIdAndUpdate(verifiedUser._id, {
+      await User.findByIdAndUpdate(verifiedUser.id, {
         $addToSet: { socketIds: socket.id },
       });
 
-      logger.info(colors.blue(`User connected: ${verifiedUser._id}`));
+      logger.info(colors.blue(`User connected: ${verifiedUser.id}`));
 
       socket.on("disconnect", async () => {
         await User.findByIdAndUpdate(socket.data.userId, {
