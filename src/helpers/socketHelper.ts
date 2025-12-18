@@ -12,22 +12,18 @@ const socket = (io: Server) => {
       const token =
         socket.handshake.auth?.token ||
         (socket.handshake.headers.token as string);
-
+      console.log(token);
       if (!token) {
         socket.emit("auth_error", "Authentication token required");
         return socket.disconnect(true);
       }
 
-      const extractedToken = token.startsWith("Bearer ")
-        ? token.slice(7)
-        : token;
-
       const verifiedUser = jwtHelper.verifyToken(
-        extractedToken,
+        token,
         config.jwt.jwt_secret as Secret
       );
 
-      if (!verifiedUser?._id) {
+      if (!verifiedUser?.id) {
         socket.emit("auth_error", "Invalid token");
         return socket.disconnect(true);
       }
