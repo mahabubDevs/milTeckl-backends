@@ -4,6 +4,7 @@ import {
   Notification,
   NotificationType,
 } from "../app/modules/notification/notification.model";
+import { INotification } from "../app/modules/notification/notification.interface";
 
 interface SendNotificationInput {
   userIds: Types.ObjectId[] | string[];
@@ -27,9 +28,9 @@ export const sendNotification = async ({
   attachments,
   channel = { socket: true, push: false },
 }: SendNotificationInput) => {
-  if (!userIds?.length) return;
+  if (!userIds?.length) return [];
 
-  // 1️ Insert notifications (one per user)
+  // 1. Create notifications
   const notifications = await Notification.insertMany(
     userIds.map((userId) => ({
       userId,
@@ -39,32 +40,39 @@ export const sendNotification = async ({
       metadata,
       attachments,
       channel,
-    }))
+    })),
+    { ordered: false }
   );
 
-  // 2️ Emit to connected users only
+  // 2. Emit exact saved notification data
   if (channel.socket) {
     const users = await User.find({ _id: { $in: userIds } }).select(
-      "socketIds"
+      "_id socketIds"
     );
 
+    const notificationMap = new Map<string, INotification[]>();
+
+    notifications.forEach((n) => {
+      const key = n.userId.toString();
+      if (!notificationMap.has(key)) notificationMap.set(key, []);
+      notificationMap.get(key)!.push(n);
+    });
+
     users.forEach((user) => {
+      const userNotifications = notificationMap.get(user._id.toString());
+      if (!userNotifications?.length) return;
+
       user.socketIds?.forEach((socketId: string) => {
-        io.to(socketId).emit("newNotification", {
-          title,
-          body,
-          type,
-          metadata,
-          attachments,
-          createdAt: new Date(),
+        userNotifications.forEach((notification) => {
+          io.to(socketId).emit("newNotification", notification);
         });
       });
     });
   }
 
-  // 3️ Push notifications (future)
+  // 3. Push notifications (future)
   if (channel.push) {
-    // TODO: integrate FCM / APNS
+    // FCM / APNS
   }
 
   return notifications;
