@@ -2,6 +2,9 @@ import { StatusCodes } from 'http-status-codes'
 import ApiError from '../../../errors/ApiErrors'
 import { IRule } from './rule.interface'
 import { Rule } from './rule.model'
+import { sendNotification } from '../../../realTimeComminucation/notification'
+import { notifyAllActiveUsers } from '../../../helpers/notifiyAllActiveUsers'
+import { NotificationType } from '../notification/notification.model'
 
 //privacy policy
 const createPrivacyPolicyToDB = async (payload: IRule) => {
@@ -12,15 +15,29 @@ const createPrivacyPolicyToDB = async (payload: IRule) => {
     if (isExistPrivacy) {
 
         // update privacy is exist 
-        const result = await Rule.findOneAndUpdate({type: 'privacy'}, {content: payload?.content}, {new: true})
+        const result = await Rule.findOneAndUpdate({ type: 'privacy' }, { content: payload?.content }, { new: true })
         const message = "Privacy & Policy Updated successfully"
+
+        await notifyAllActiveUsers({
+            title: 'Policy Updated',
+            body: 'Privacy Policy  have been updated.',
+            type: NotificationType.POLICY,
+        });
+
         return { message, result }
     } else {
 
         // create new if not exist
         const result = await Rule.create({ ...payload, type: 'privacy' })
         const message = "Privacy & Policy Created successfully"
-        return {message, result}
+
+        await notifyAllActiveUsers({
+            title: 'Policy Updated',
+            body: 'Privacy Policy have been updated.',
+            type: NotificationType.POLICY,
+        });
+
+        return { message, result }
     }
 }
 
@@ -37,13 +54,23 @@ const createTermsAndConditionToDB = async (payload: IRule) => {
 
     const isExistTerms = await Rule.findOne({ type: 'terms' })
     if (isExistTerms) {
-        const result = await Rule.findOneAndUpdate({type: 'terms'}, {content: payload?.content}, {new: true})
+        const result = await Rule.findOneAndUpdate({ type: 'terms' }, { content: payload?.content }, { new: true })
         const message = "Terms And Condition Updated successfully"
+        await notifyAllActiveUsers({
+            title: 'Terms and Condition Updated',
+            body: 'Terms and Condition have been updated.',
+            type: NotificationType.POLICY,
+        });
         return { message, result }
-  
+
     } else {
         const result = await Rule.create({ ...payload, type: 'terms' });
         const message = "Terms And Condition Created Successfully"
+        await notifyAllActiveUsers({
+            title: 'Terms and Condition Updated',
+            body: 'Terms and Condition have been updated.',
+            type: NotificationType.POLICY,
+        });
         return { message, result }
     }
 }
@@ -61,7 +88,7 @@ const createAboutToDB = async (payload: IRule) => {
 
     const isExistAbout = await Rule.findOne({ type: 'about' })
     if (isExistAbout) {
-        const result = await Rule.findOneAndUpdate({type: 'about'}, {content: payload?.content}, {new: true})
+        const result = await Rule.findOneAndUpdate({ type: 'about' }, { content: payload?.content }, { new: true })
         const message = "About Us Updated successfully"
         return { message, result }
     } else {
@@ -70,7 +97,7 @@ const createAboutToDB = async (payload: IRule) => {
         return { message, result }
     }
 }
-  
+
 const getAboutFromDB = async () => {
 
     const result = await Rule.findOne({ type: 'about' })
@@ -79,7 +106,7 @@ const getAboutFromDB = async () => {
     }
     return result
 }
-  
+
 export const RuleService = {
     createPrivacyPolicyToDB,
     getPrivacyPolicyFromDB,

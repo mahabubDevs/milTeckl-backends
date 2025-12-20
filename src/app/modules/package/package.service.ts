@@ -76,7 +76,7 @@ const updatePackageToDB = async (id: string, payload: Partial<IPackage>): Promis
 };
 
 const getPackageFromDB = async(paymentType?: string): Promise<IPackage[]> => {
-    const query: any = { status: "Active" };
+    const query: any = { };
     if(paymentType) query.paymentType = paymentType;
     return Package.find(query);
 };
@@ -99,11 +99,25 @@ const deletePackageToDB = async(id: string): Promise<IPackage | null> => {
     return result;
 };
 
+const togglePackageStatusInDB = async(id: string): Promise<IPackage | null> => {
+    if(!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid ID");
+    const existingPackage = await Package.findById(id);
+    if(!existingPackage) throw new ApiError(StatusCodes.BAD_REQUEST, "Package not found");
+    const newStatus = existingPackage.status === "Active" ? "Inactive" : "Active";
+    return Package.findByIdAndUpdate(id, { status: newStatus }, { new: true });
+};
+
+const getActivePackagesFromDB = async (): Promise<IPackage[]> => {
+    return Package.find({ status: "Active" });
+};
+
 export const PackageService = {
     createPackageToDB,
     updatePackageToDB,
     getPackageFromDB,
     getPackageDetailsFromDB,
     deletePackageToDB,
-    getSinglePackageFromDB
+    getSinglePackageFromDB,
+    togglePackageStatusInDB,
+    getActivePackagesFromDB
 };

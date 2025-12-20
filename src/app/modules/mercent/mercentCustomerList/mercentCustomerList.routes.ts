@@ -20,4 +20,5 @@ router.get(
   MemberController.getSingleMember
 );
 
+router.get("/customers/:id/tier", auth(USER_ROLES.MERCENT), MemberController.getSingleMemberTier)
 export const MercentCustomerListRoutes = router;

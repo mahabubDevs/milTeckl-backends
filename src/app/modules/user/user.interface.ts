@@ -129,6 +129,7 @@ export interface IUser {
   accountInformation?: IStripeAccountInfo;
   gender?: string;
   lastActive: Date;
+  socketIds: string[];
 }
 
 export type UserModal = {

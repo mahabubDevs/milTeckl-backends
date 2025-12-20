@@ -8,6 +8,8 @@ import sendResponse from "../../../../shared/sendResponse";
 import { IPromotion } from "./promotionMercent.interface";
 import { JwtPayload } from "jsonwebtoken";
 import { Promotion } from "./promotionMercent.model";
+import { sendNotification } from "../../../../helpers/notificationsHelper";
+import { NotificationType } from "../../notification/notification.model";
 
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   // body data parse
@@ -50,11 +52,19 @@ const createPromotion = catchAsync(async (req: Request, res: Response) => {
     availableDays,
     endDate: new Date(endDate),
     image: imageUrl,
-    merchantId, // ✅ save merchantId in DB
+    merchantId,
   };
 
   const result = await PromotionService.createPromotionToDB(payload);
 
+  if (result) {
+    await sendNotification({
+      userIds: [result.merchantId],
+      title: "Congratulations! promotion published",
+      body: `Your promotion "${name}" has been published successfully`,
+      type: NotificationType.PROMOTION,
+    })
+  }
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -248,6 +258,27 @@ const getPromotionsByUserCategory = catchAsync(
   }
 );
 
+const sendNotificationToCustomer = catchAsync(async (req: Request, res: Response) => {
+  let attachment;
+  if (req.files && "image" in req.files && req.files.image[0]) {
+    attachment = `/images/${req.files.image[0].filename}`;
+  }
+
+  const data = {
+    ...req.body,
+    attachment,
+  };
+  const merchant = req.user as JwtPayload;
+  const result = await PromotionService.sendNotificationToCustomer(data, merchant._id);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Promotion Notification sent successfully",
+    data: result,
+  });
+});
+
 export const PromotionController = {
   createPromotion,
   getAllPromotions,
@@ -263,5 +294,6 @@ export const PromotionController = {
   getPromotionsForUser,
 
   getAllPromotionsOfAMerchant,
+  sendNotificationToCustomer
 
 };
