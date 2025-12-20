@@ -1,20 +1,33 @@
-import cron from "node-cron";
 
 import { Types } from "mongoose";
 import { MerchantCustomer } from "../app/modules/mercent/merchantCustomer/merchantCustomer.model";
+import { logger } from "../shared/logger";
 
-cron.schedule("0 2 * * *", async () => {
-    const merchants = (await MerchantCustomer.distinct("merchantId")) as Types.ObjectId[];
+export const updateMerchantVipCustomersJob = async (): Promise<void> => {
+    try {
+        const merchants = (await MerchantCustomer.distinct(
+            "merchantId"
+        )) as Types.ObjectId[];
 
-    if (merchants.length > 0) {
         for (const merchantId of merchants) {
-            await updateMerchantVipCustomers(merchantId);
+            try {
+                await updateMerchantVipCustomers(merchantId);
+            } catch (error) {
+                logger.error(
+                    `[CRON] Failed to update VIP customers for merchant ${merchantId}`,
+                    error
+                );
+            }
         }
+    } catch (error) {
+        logger.error("[CRON] Failed to fetch merchant list", error);
+        throw error;
     }
-});
+};
 
-
-const updateMerchantVipCustomers = async (merchantId: Types.ObjectId) => {
+const updateMerchantVipCustomers = async (
+    merchantId: Types.ObjectId
+): Promise<void> => {
     const result = await MerchantCustomer.aggregate([
         { $match: { merchantId } },
         { $sort: { totalSpend: -1, totalOrders: -1 } },
@@ -30,14 +43,19 @@ const updateMerchantVipCustomers = async (merchantId: Types.ObjectId) => {
                 vipIds: {
                     $slice: [
                         "$ids",
-                        { $max: [1, { $ceil: { $multiply: ["$count", 0.1] } }] },
+                        {
+                            $max: [
+                                1,
+                                { $ceil: { $multiply: ["$count", 0.1] } },
+                            ],
+                        },
                     ],
                 },
             },
         },
     ]);
 
-    const vipIds = result[0]?.vipIds || [];
+    const vipIds: Types.ObjectId[] = result[0]?.vipIds || [];
 
     await MerchantCustomer.updateMany(
         { merchantId },

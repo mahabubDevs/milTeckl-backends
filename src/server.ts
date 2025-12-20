@@ -8,6 +8,7 @@ import { setupWebSocketServer } from "./realTimeComminucation/ws.server";
 import { Server } from "socket.io";
 import seedSuperAdmin from "./DB";
 import { socketHelper } from "./helpers/socketHelper";
+import { startCronJobs } from "./cronJobs";
 
 // uncaught exception
 process.on("uncaughtException", (error) => {
@@ -25,6 +26,7 @@ async function main() {
     await mongoose.connect(config.database_url as string);
     logger.info(colors.green("🚀 Database connected successfully"));
 
+    await startCronJobs()
     const port =
       typeof config.port === "number" ? config.port : Number(config.port);
 
@@ -37,13 +39,13 @@ async function main() {
     // });
 
     //socket
-    
-    
-    server = app.listen(port, '0.0.0.0', () => {
-  logger.info(`Worker ${process.pid} listening on port:${config.port}`);
-});
 
-    
+
+    server = app.listen(port, '0.0.0.0', () => {
+      logger.info(`Worker ${process.pid} listening on port:${config.port}`);
+    });
+
+
     const io = new Server(server, {
       pingTimeout: 60000,
       cors: {
