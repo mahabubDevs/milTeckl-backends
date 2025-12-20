@@ -4,7 +4,6 @@ import { User } from "../app/modules/user/user.model";
 import { CUSTOMER_SEGMENT } from "../enums/user";
 import { MerchantCustomer } from "../app/modules/mercent/merchantCustomer/merchantCustomer.model";
 
-
 export const resolveCustomerIdsBySegment = async ({
     merchantId,
     segment,
@@ -13,82 +12,141 @@ export const resolveCustomerIdsBySegment = async ({
     merchantLocation,
 }: {
     merchantId: Types.ObjectId;
-    segment: CUSTOMER_SEGMENT
+    segment: CUSTOMER_SEGMENT;
     minPoints?: number;
     radiusKm?: number;
     merchantLocation?: { lng: number; lat: number };
 }) => {
+    /* ---------- VIP / ALL ---------- */
+    if (segment === CUSTOMER_SEGMENT.VIP_CUSTOMER) {
+        return MerchantCustomer.find({ merchantId, isVip: true })
+            .select("customerId");
+    }
+
+    if (segment === CUSTOMER_SEGMENT.ALL_CUSTOMER) {
+        return MerchantCustomer.find({ merchantId })
+            .select("customerId");
+    }
+
     const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    /* ---------- BASE: customers who transacted ---------- */
-    const customerIds = await Sell.distinct("userId", {
-        merchantId,
-        status: "completed",
-    });
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    let match: any = { _id: { $in: customerIds } };
-
-    /* ---------- POINT FILTER ---------- */
-    if (minPoints) {
-        match.loyaltyPoints = { $gte: minPoints };
-    }
-
-    /* ---------- GEO FILTER ---------- */
-    if (radiusKm && merchantLocation) {
-        match.location = {
-            $near: {
-                $geometry: {
-                    type: "Point",
-                    coordinates: [merchantLocation.lng, merchantLocation.lat],
-                },
-                $maxDistance: radiusKm * 1000,
+    const pipeline: any[] = [
+        /* ---------- BASE SELL ---------- */
+        {
+            $match: {
+                merchantId,
+                status: "completed",
             },
-        };
-    }
+        },
 
-    /* ---------- SEGMENT FILTER ---------- */
-    if (segment === CUSTOMER_SEGMENT.NEW) {
-        const since = new Date(now.setDate(now.getDate() - 30));
-        match.createdAt = { $gte: since };
+        /* ---------- GROUP PER CUSTOMER ---------- */
+        {
+            $group: {
+                _id: "$userId",
+                purchaseCount: { $sum: 1 },
+                totalSpend: { $sum: "$totalBill" },
+                lastPurchaseAt: { $max: "$createdAt" },
+            },
+        },
 
-        const buyers = await Sell.aggregate([
-            { $match: { merchantId, status: "completed" } },
-            { $group: { _id: "$userId", count: { $sum: 1 } } },
-            { $match: { count: { $lte: 1 } } },
-        ]);
+        /* ---------- SEGMENT LOGIC ---------- */
+        ...(segment === CUSTOMER_SEGMENT.NEW_CUSTOMER
+            ? [{
+                $match: {
+                    purchaseCount: { $lte: 1 },
+                    lastPurchaseAt: { $gte: thirtyDaysAgo },
+                },
+            }]
+            : []),
 
-        match._id = { $in: buyers.map(b => b._id) };
-    }
+        ...(segment === CUSTOMER_SEGMENT.RETURNING_CUSTOMER
+            ? [{
+                $match: {
+                    purchaseCount: { $gte: 2, $lt: 5 },
+                },
+            }]
+            : []),
 
-    if (segment === CUSTOMER_SEGMENT.RETURNING) {
-        const buyers = await Sell.aggregate([
-            { $match: { merchantId, status: "completed" } },
-            { $group: { _id: "$userId", count: { $sum: 1 } } },
-            { $match: { count: { $gte: 2, $lt: 5 } } },
-        ]);
+        ...(segment === CUSTOMER_SEGMENT.LOYAL_CUSTOMER
+            ? [{
+                $match: {
+                    purchaseCount: { $gte: 5 },
+                    lastPurchaseAt: { $gte: sixMonthsAgo },
+                },
+            }]
+            : []),
 
-        match._id = { $in: buyers.map(b => b._id) };
-    }
+        /* ---------- JOIN MERCHANT CUSTOMER ---------- */
+        {
+            $lookup: {
+                from: "merchantcustomers",
+                let: { userId: "$_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ["$customerId", "$$userId"] },
+                                    { $eq: ["$merchantId", merchantId] },
+                                ],
+                            },
+                        },
+                    },
+                ],
+                as: "merchantCustomer",
+            },
+        },
+        { $unwind: "$merchantCustomer" },
 
-    if (segment === CUSTOMER_SEGMENT.LOYAL) {
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        /* ---------- POINT FILTER (PER MERCHANT) ---------- */
+        ...(minPoints
+            ? [{
+                $match: {
+                    "merchantCustomer.points": { $gte: minPoints },
+                },
+            }]
+            : []),
 
-        const loyal = await Sell.aggregate([
-            { $match: { merchantId, status: "completed", createdAt: { $gte: sixMonthsAgo } } },
-            { $group: { _id: "$userId", count: { $sum: 1 }, spend: { $sum: "$totalBill" } } },
-            { $match: { count: { $gte: 5 } } },
-        ]);
+        /* ---------- JOIN USER (GEO) ---------- */
+        {
+            $lookup: {
+                from: "users",
+                localField: "_id",
+                foreignField: "_id",
+                as: "user",
+            },
+        },
+        { $unwind: "$user" },
 
-        match._id = { $in: loyal.map(l => l._id) };
-    }
+        /* ---------- GEO FILTER ---------- */
+        ...(radiusKm && merchantLocation
+            ? [{
+                $match: {
+                    "user.location": {
+                        $geoWithin: {
+                            $centerSphere: [
+                                [merchantLocation.lng, merchantLocation.lat],
+                                radiusKm / 6378.1,
+                            ],
+                        },
+                    },
+                },
+            }]
+            : []),
 
-    if (segment === CUSTOMER_SEGMENT.VIP) {
-        return await MerchantCustomer.find({
-            merchantId,
-            isVip: true,
-        }).select("customerId");
-    }
 
-    return User.find(match).select("_id");
+        /* ---------- OUTPUT ---------- */
+        {
+            $project: {
+                _id: "$_id",
+            },
+        },
+    ];
+
+    return Sell.aggregate(pipeline);
 };
