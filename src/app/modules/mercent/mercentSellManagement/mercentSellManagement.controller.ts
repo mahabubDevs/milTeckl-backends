@@ -9,49 +9,14 @@ import { Sell } from "./mercentSellManagement.model";
 import { Types } from "mongoose";
 import { IDigitalCard, ISell } from "./mercentSellManagement.interface";
 import QueryBuilder from "../../../../util/queryBuilder";
+import { Rating } from "../../customer/rating/rating.model";
 
 // 🔹 Demo data fallback
-const demoSales = [
-  {
-    SL: 1,
-    CustomerName: "Alice Johnson",
-    CardID: "CARD001",
-    TotalAmount: 120,
-    PointRedeem: 20,
-    PointEarned: 12,
-    FinalAmount: 100,
-    TransactionStatus: "Completed",
-    Promotion: "Holiday Sale",
-    Actions: "",
-  },
-  {
-    SL: 2,
-    CustomerName: "John Doe",
-    CardID: "CARD002",
-    TotalAmount: 80,
-    PointRedeem: 10,
-    PointEarned: 8,
-    FinalAmount: 70,
-    TransactionStatus: "Pending",
-    Promotion: "New Year Offer",
-    Actions: "",
-  },
-  {
-    SL: 3,
-    CustomerName: "Michael Brown",
-    CardID: "CARD003",
-    TotalAmount: 200,
-    PointRedeem: 50,
-    PointEarned: 20,
-    FinalAmount: 150,
-    TransactionStatus: "Completed",
-    Promotion: null,
-    Actions: "",
-  },
-];
+
 
 const checkout = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, totalBill, promotionId } = req.body;
+  const { digitalCardCode, totalBill, promotionId,pointRedeemed } = req.body;
+  console.log("Checkout request body:", req.body);
 
   if (!req.user) {
     return sendResponse(res, {
@@ -90,7 +55,8 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     merchantId,
     digitalCardCode,
     totalBill,
-    promotionId
+    promotionId,
+    pointRedeemed
   );
 
   sendResponse(res, {
@@ -101,62 +67,6 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// const finalizeCheckout = catchAsync(async (req: Request, res: Response) => {
-//   const { digitalCardId, promotionId, totalBill } = req.body;
-//   const user = req.user as IUser; // merchant
-
-//   const digitalCard = await DigitalCard.findOne({
-//     _id: digitalCardId,
-//     merchantId: user._id
-//   });
-
-//   if (!digitalCard) throw new Error("Digital Card not found");
-
-//   const promo = digitalCard.promotions.find(p => p.promotionId && p.promotionId.toString() === promotionId);
-
-//   if (!promo || !promo.approvedByUser)
-//     throw new Error("Promotion not approved by user");
-
-//   const discountPercentage = 20; // fetch from promotion model if needed
-//   const discountedBill = totalBill - (totalBill * discountPercentage) / 100;
-
-//   const pointsEarned = discountedBill;
-//   digitalCard.availablePoints = (digitalCard.availablePoints || 0) + pointsEarned;
-//   await digitalCard.save();
-
-//   return sendResponse(res, {
-//     statusCode: StatusCodes.OK,
-//     success: true,
-//     message: "Checkout confirmed. Discount applied & points added.",
-//     data: { discountedBill, pointsEarned }
-//   });
-// });
-
-// const requestApproval = catchAsync(async (req: Request, res: Response) => {
-//   const { digitalCardCode, promotionId } = req.body;
-//   const merchant = req.user as IUser;
-
-//   if (!merchant._id) {
-//     return sendResponse(res, {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       success: false,
-//       message: "Merchant ID not found",
-//     });
-//   }
-
-//   const result = await SellService.requestApproval(
-//     merchant._id.toString(),
-//     digitalCardCode,
-//     promotionId
-//   );
-
-//   sendResponse(res, {
-//     statusCode: StatusCodes.OK,
-//     success: true,
-//     message: "Approval request sent to user",
-//     data: result,
-//   });
-// });
 
 const requestApproval = catchAsync(async (req: Request, res: Response) => {
   const {
@@ -267,26 +177,6 @@ const approvePromotionreject = catchAsync(
   }
 );
 
-// const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
-//   const user = req.user as IUser;
-//   const { digitalCardId, type } = req.query;
-
-//   if (!user._id) {
-//     return sendResponse(res, {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       success: false,
-//       message: "User ID not found",
-//     });
-//   }
-
-//   if (!digitalCardId) {
-//     return sendResponse(res, {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       success: false,
-//       message: "digitalCardId is required",
-//     });
-//   }
-
 // Controller
 const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
   const user = req.user as IUser;
@@ -322,63 +212,39 @@ const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
 });
 
 
-// const getMerchantSales = async (req: Request, res: Response) => {
-//   try {
-//     const merchantId = req.params.merchantId;
+const getUserFullTransactions = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const type = (req.query.type as "all" | "earn" | "use") || "all";
+  const page = parseInt((req.query.page as string) || "1");
+  const limit = parseInt((req.query.limit as string) || "20");
 
-//     if (!Types.ObjectId.isValid(merchantId)) {
-//       return res.status(400).json({ success: false, message: "Invalid merchant ID" });
-//     }
+  const result = await SellService.getUserFullTransactions(userId, type, page, limit);
 
-//     const sales = await Sell.find({ merchantId })
-//       .populate("userId", "firstName lastName email")
-//       .populate("digitalCardId", "cardNumber type")
-//       .populate("promotionId", "name discountPercentage")
-//       .sort({ createdAt: -1 })
-//       .lean<Array<{
-//         _id: string;
-//         merchantId: string;
-//         userId?: { firstName: string; lastName?: string; email?: string };
-//         digitalCardId?: { cardNumber: string; type?: string };
-//         promotionId?: { name: string; discountPercentage: number };
-//         totalBill: number;
-//         discountedBill: number;
-//         pointsEarned: number;
-//         pointRedeemed?: number;
-//         status: "completed" | "pending";
-//         createdAt: Date;
-//         updatedAt: Date;
-//       }>>();
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "User transactions fetched successfully",
+    data: result.transactions,
+    // pagination: result.pagination,
+  });
+});
 
-//     const result = sales.map((tx, index: number) => ({
-//       SL: index + 1,
-//       CustomerName: tx.userId?.firstName + (tx.userId?.lastName ? " " + tx.userId?.lastName : ""),
-//       CardID: tx.digitalCardId?.cardNumber || "",
-//       TotalAmount: tx.totalBill,
-//       PointRedeem: tx.pointRedeemed || 0,
-//       PointEarned: tx.pointsEarned,
-//       FinalAmount: tx.discountedBill,
-//       TransactionStatus: tx.status.charAt(0).toUpperCase() + tx.status.slice(1),
-//       Promotion: tx.promotionId?.name || null,
-//       Actions: ""
-//     }));
 
-//     return res.status(200).json({ success: true, data: result });
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(500).json({ success: false, message: "Server Error", error });
-//   }
-// };
 
 const getMerchantSales = async (req: Request, res: Response) => {
   try {
-    const merchantId = req.params.merchantId;
+    // 🔐 Get merchant from login
+    const merchant = req.user as { _id: string; role?: string };
 
-    if (!Types.ObjectId.isValid(merchantId)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid merchant ID" });
+    if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized merchant",
+      });
     }
+
+    const merchantId = merchant._id;
+    console.log("Merchant ID (from login):", merchantId);
 
     // 1️⃣ Base query for this merchant
     let query = Sell.find({ merchantId });
@@ -451,10 +317,8 @@ const getMerchantSales = async (req: Request, res: Response) => {
       userMap[userId].totalPointsRedeemed += tx.pointRedeemed || 0;
       userMap[userId].totalBilled! += tx.totalBill || 0;
       userMap[userId].finalBilled! += tx.discountedBill || 0;
-      // ✅ set status from Sell document
       userMap[userId].status = tx.status || "";
 
-      // Set cardIds from digitalCardId
       if (tx.digitalCardId && tx.digitalCardId.cardCode) {
         userMap[userId].cardIds = tx.digitalCardId.cardCode;
       }
@@ -478,6 +342,165 @@ const getMerchantSales = async (req: Request, res: Response) => {
 };
 
 
+
+
+const getMerchantCustomersList = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    // 🔐 merchant from logged-in user
+    const merchant = req.user as { _id: string; role?: string };
+
+    if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized merchant",
+      });
+    }
+
+    const merchantId = merchant._id;
+
+    // 1️⃣ Base query (this merchant only)
+    let query = Sell.find({ merchantId });
+
+    // 2️⃣ Apply query builder
+    const qb = new QueryBuilder(query, req.query)
+      .filter()
+      .search(["userId.firstName", "userId.lastName"])
+      .sort()
+      .paginate()
+      .populate(["userId", "digitalCardId", "merchantId"], {
+        userId: "firstName lastName email phone profile customUserId country",
+        digitalCardId: "cardCode availablePoints",
+        merchantId: "businessName shopName firstName",
+      });
+
+    // 3️⃣ Execute query
+    const sales = await qb.modelQuery.lean();
+    const paginationInfo = await qb.getPaginationInfo();
+
+    if (!sales.length) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: paginationInfo,
+      });
+    }
+
+    // 4️⃣ Collect unique customer userIds
+    const userIds = [
+      ...new Set(
+        sales
+          .map((tx: any) => tx.userId?._id?.toString())
+          .filter(Boolean)
+      ),
+    ];
+
+    // 5️⃣ Fetch ratings (given to this merchant)
+    const ratings = await Rating.find({
+      merchantId,
+      userId: { $in: userIds },
+    })
+      .select("userId rating comment")
+      .lean();
+
+    // 6️⃣ Build rating map
+    const ratingMap: Record<string, { rating: number; comment: string }> = {};
+
+    ratings.forEach((r: any) => {
+      ratingMap[r.userId.toString()] = {
+        rating: r.rating,
+        comment: r.comment,
+      };
+    });
+
+    // 7️⃣ Customer summary interface
+    interface IUserSummary {
+      _id: string;
+      name: string;
+      email?: string;
+      phone?: string;
+      profile?: string;
+      country?: string;
+      customUserId?: string;
+      totalTransactions: number;
+      totalPointsEarned: number;
+      totalPointsRedeemed: number;
+      totalBilled: number;
+      finalBilled: number;
+      cardIds?: string;
+      availablePoints?: number;
+      status?: string;
+      salesRep?: string;
+      rating?: number;
+      ratingComment?: string;
+    }
+
+    const userMap: Record<string, IUserSummary> = {};
+
+    // 8️⃣ Aggregate sales per customer
+    sales.forEach((tx: any) => {
+      const user = tx.userId;
+      if (!user?._id) return;
+
+      const userId = user._id.toString();
+
+      if (!userMap[userId]) {
+        userMap[userId] = {
+          _id: userId,
+          name: `${user.firstName} ${user.lastName || ""}`.trim(),
+          email: user.email,
+          phone: user.phone,
+          profile: user.profile,
+          country: user.country,
+          customUserId: user.customUserId || "",
+          totalTransactions: 0,
+          totalPointsEarned: 0,
+          totalPointsRedeemed: 0,
+          totalBilled: 0,
+          finalBilled: 0,
+          cardIds: "",
+          availablePoints: tx.digitalCardId?.availablePoints || 0,
+          salesRep:
+            tx.merchantId?.businessName ||
+            tx.merchantId?.shopName ||
+            tx.merchantId?.firstName ||
+            "",
+          rating: ratingMap[userId]?.rating,
+          ratingComment: ratingMap[userId]?.comment,
+        };
+      }
+
+      userMap[userId].totalTransactions += 1;
+      userMap[userId].totalPointsEarned += tx.pointsEarned || 0;
+      userMap[userId].totalPointsRedeemed += tx.pointRedeemed || 0;
+      userMap[userId].totalBilled += tx.totalBill || 0;
+      userMap[userId].finalBilled += tx.discountedBill || 0;
+      userMap[userId].status = tx.status;
+
+      if (tx.digitalCardId?.cardCode) {
+        userMap[userId].cardIds = tx.digitalCardId.cardCode;
+      }
+    });
+
+    // 9️⃣ Response
+    return res.status(200).json({
+      success: true,
+      data: Object.values(userMap),
+      pagination: paginationInfo,
+    });
+  } catch (error) {
+    console.error("Error in getMerchantCustomersList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+
+
 export default {
   checkout,
   requestApproval,
@@ -486,5 +509,7 @@ export default {
   approvePromotionreject,
   getPointsHistory,
   getMerchantSales,
+  getMerchantCustomersList,
+  getUserFullTransactions
   // finalizeCheckout
 };

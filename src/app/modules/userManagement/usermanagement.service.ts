@@ -9,6 +9,8 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
+import { generateCustomUserId } from "../user/user.utils";
+import { createUniqueReferralId } from "../../../util/generateRefferalId";
 
 // create user
 const createUserToDB = async (payload: IUser) => {
@@ -74,6 +76,10 @@ const createMerchantToDB = async (payload: any) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Phone already exists");
   }
 
+
+  const referenceId = await createUniqueReferralId();
+  const customerId = await generateCustomUserId(USER_ROLES.MERCENT);
+
   // 🔥 merchant data (any use, model change না করে)
   const merchantData: any = {
     ...payload,
@@ -83,8 +89,8 @@ const createMerchantToDB = async (payload: any) => {
     status: USER_STATUS.ACTIVE,
     verified: true,
 
-    customUserId: uuidv4(),
-    referenceId: uuidv4(),
+    customUserId: customerId,
+    referenceId: referenceId,
 
     // merchant specific (extra field — TS safe)
     businessName: payload.businessName,
@@ -93,6 +99,7 @@ const createMerchantToDB = async (payload: any) => {
     expiryDate: payload.expiryDate,
     tier: payload.tier,
     salesRep: payload.salesRep,
+    city: payload.city,
   };
 
   const result = await User.create(merchantData);

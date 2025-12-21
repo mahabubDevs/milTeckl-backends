@@ -10,6 +10,7 @@ import { JwtPayload } from "jsonwebtoken";
 import { Promotion } from "./promotionMercent.model";
 import { sendNotification } from "../../../../helpers/notificationsHelper";
 import { NotificationType } from "../../notification/notification.model";
+import { DigitalCard } from "../../customer/digitalCard/digitalCard.model";
 
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   // body data parse
@@ -39,7 +40,7 @@ const createPromotion = catchAsync(async (req: Request, res: Response) => {
 
   // MERCHANT ID from request.user (auth middleware sets req.user)
   const merchantId = (req.user as any)?._id;
-  if (!merchantId) {
+   if (!merchantId) {
     throw new ApiError(StatusCodes.UNAUTHORIZED, "Merchant ID not found");
   }
 
@@ -83,6 +84,8 @@ const getAllPromotions = catchAsync(async (req: Request, res: Response) => {
     pagination: result.pagination,
   });
 });
+
+
 const getAllPromotionsOfAMerchant = catchAsync(
   async (req: Request, res: Response) => {
     const user = req.user as JwtPayload;
@@ -106,13 +109,52 @@ const getPromotionsForUser = catchAsync(async (req: Request, res: Response) => {
     throw new ApiError(StatusCodes.UNAUTHORIZED, "User ID not found");
   }
 
+  // 1️⃣ Determine user segment
   const userSegment = await PromotionService.getUserSegment(userId);
 
-  const promotions = await Promotion.find({
+  // 2️⃣ Today's date & day
+  const today = new Date();
+  const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const todayDay = dayMap[today.getDay()];
+
+  // 3️⃣ Fetch promotions that match user segment or all_customer
+  let promotions = await Promotion.find({
     customerSegment: { $in: [userSegment, "all_customer"] },
     status: "active"
   }).populate("merchantId", "website name");
 
+
+    // 4️⃣ Fetch user's digital cards
+  const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+
+  // 5️⃣ Collect all promotionIds user already has
+// Collect all promotionIds user already has safely
+const existingPromotionIds = digitalCards.flatMap(card =>
+  card.promotions
+    .map(p => p.promotionId?.toString()) // ❗ optional chaining
+    .filter(Boolean) as string[]          // ❗ null/undefined remove
+);
+
+
+
+  // 4️⃣ Filter promotions by valid date and available days
+// 6️⃣ Filter promotions by valid date, available days, and not already in user's cards
+promotions = promotions.filter(promo => {
+  const startDate = new Date(promo.startDate);
+  const endDate = new Date(promo.endDate);
+
+  const isValidDate = today >= startDate && today <= endDate;
+
+  const days = promo.availableDays || [];
+  const isValidDay = days.includes("all") || days.includes(todayDay);
+
+  const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
+
+  return isValidDate && isValidDay && isNotInUserCard;
+});
+
+
+  // 5️⃣ Send response
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,

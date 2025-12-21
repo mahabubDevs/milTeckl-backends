@@ -24,6 +24,11 @@ const digitalCardSchema = new Schema(
       type: Number,
       default: 0,
     },
+    lifeTimeEarnPoints: {
+      type: Number,
+      default: 0,
+    },
+    tier: { type: String, default: null },
 
 // Promotion tracking with status
     promotions: [

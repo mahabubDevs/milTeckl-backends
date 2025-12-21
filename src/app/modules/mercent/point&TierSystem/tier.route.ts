@@ -9,11 +9,11 @@ const router = Router();
 
 router.route("/")
   .get(auth(), TierController.getTier)
-  .post(auth(USER_ROLES.ADMIN,USER_ROLES.SUPER_ADMIN,USER_ROLES.MERCENT), TierController.createTier);
+  .post(auth(USER_ROLES.MERCENT), TierController.createTier);
 
 router.route("/:id")
-  .get(auth(), TierController.getSingleTier)
-  .patch(auth(USER_ROLES.ADMIN,USER_ROLES.SUPER_ADMIN,USER_ROLES.MERCENT), TierController.updateTier)
-  .delete(auth(USER_ROLES.ADMIN,USER_ROLES.SUPER_ADMIN,USER_ROLES.MERCENT), TierController.deleteTier);
+  .get(auth(USER_ROLES.VIEW_MERCENT,USER_ROLES.MERCENT,USER_ROLES.USER), TierController.getSingleTier)
+  .patch(auth(USER_ROLES.MERCENT), TierController.updateTier)
+  .delete(auth(USER_ROLES.MERCENT), TierController.deleteTier);
 
 export const TierRoutes = router;

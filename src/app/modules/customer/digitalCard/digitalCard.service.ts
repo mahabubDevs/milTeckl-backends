@@ -126,6 +126,13 @@ const getUserAddedPromotions = async (
 
     { $unwind: "$promotions" },
 
+    // ❗ Skip used promotions
+    {
+      $match: {
+        "promotions.status": { $ne: "used" }, // used promotions exclude
+      },
+    },
+
     {
       $lookup: {
         from: "promotionmercents",
@@ -311,35 +318,94 @@ const getPromotionsOfDigitalCard = async (digitalCardId: string) => {
   };
 };
 
+
 const getMerchantDigitalCardWithPromotions = async (
   merchantId: string,
-  cardCode: string
+  code: string // can be digital card code OR promotion cardId
 ) => {
-  const digitalCard = await DigitalCard.findOne({
+  let searchedByPromotionCode = false;
+  let digitalCard: any = null;
+
+  // 1️⃣ Try search by DIGITAL CARD code first
+  digitalCard = await DigitalCard.findOne({
     merchantId,
-    cardCode,
+    cardCode: code,
   }).populate({
     path: "promotions.promotionId",
-    model: "PromotionMercent",
     select:
-      "name discountPercentage promotionType image startDate endDate status code",
+      "name discountPercentage promotionType image startDate endDate status cardId",
   });
+
+  if (!digitalCard) {
+    // 2️⃣ If not found by digital card, try promotion cardId
+    searchedByPromotionCode = true;
+
+    // 🔹 Step 1: Find promotion by cardId (case-insensitive)
+    const today = new Date();
+    const promotion = await Promotion.findOne({
+      cardId: { $regex: `^${code}$`, $options: "i" },
+      merchantId,
+      startDate: { $lte: today }, // startDate আজকের তারিখের আগে বা সমান
+      endDate: { $gte: today },   // endDate আজকের তারিখের পরে বা সমান
+    });
+
+    console.log("Found promotion by cardId:", promotion);
+
+    if (!promotion) return null;
+
+    // 🔹 Step 2: Find merchant's digital card that contains this promotion and is pending + unused
+    digitalCard = await DigitalCard.findOne({
+      merchantId,
+      "promotions.promotionId": promotion._id,
+      "promotions.status": { $in: ["pending", "unused"] },
+      "promotions.usedAt": null,
+    }).populate({
+      path: "promotions.promotionId",
+      select:
+        "name discountPercentage promotionType image startDate endDate status cardId",
+    });
+    if (!digitalCard) return null;
+  }
 
   if (!digitalCard) return null;
 
-  // Filter only valid promotions
+  // 3️⃣ Filter only valid promotions
   const validPromotions = digitalCard.promotions
     .map((item: any) => {
-      if (item.promotionId) {
-        return {
-          status: item.status,
-          usedAt: item.usedAt,
-          ...item.promotionId.toObject(),
-        };
-      }
+      if (
+  item.promotionId &&
+  (item.status === "pending" || item.status === "unused") &&
+  !item.usedAt
+) {
+  // ✅ Check promotion date
+  const today = new Date();
+  const startDate = new Date(item.promotionId.startDate);
+  const endDate = new Date(item.promotionId.endDate);
+  if (today < startDate || today > endDate) return null; // Skip if outside date range
+
+  // If searching by promotion cardId, only return that promotion
+  if (searchedByPromotionCode && item.promotionId.cardId.toUpperCase() !== code.toUpperCase()) {
+    return null;
+  }
+
+  // ✅ Only valid promotions reach here
+  console.log("Promotion to be returned:", {
+    cardId: item.promotionId.cardId,
+    name: item.promotionId.name,
+    startDate: item.promotionId.startDate,
+    endDate: item.promotionId.endDate,
+    status: item.status,
+  });
+
+  return {
+    status: item.status,
+    usedAt: item.usedAt,
+    ...item.promotionId.toObject(),
+  };
+}
       return null;
     })
-    .filter(Boolean); // remove null
+    .filter(Boolean);
 
   if (validPromotions.length === 0) return null;
 
@@ -350,6 +416,9 @@ const getMerchantDigitalCardWithPromotions = async (
     },
   };
 };
+
+
+
 
 export const DigitalCardService = {
   addPromotionToDigitalCard,

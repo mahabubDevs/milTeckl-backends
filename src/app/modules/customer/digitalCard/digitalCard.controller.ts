@@ -131,6 +131,7 @@ const getDigitalCardPromotions = catchAsync(async (req, res) => {
 const getMerchantDigitalCard = catchAsync(async (req, res) => {
   const { cardCode } = req.query;
 
+  // 🔐 Auth check
   if (!req.user) {
     return sendResponse(res, {
       statusCode: StatusCodes.UNAUTHORIZED,
@@ -139,10 +140,9 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     });
   }
 
-  // Safe casting
   const user = req.user as IUser;
 
-  // Only allow if role is MERCHANT
+  // 🛑 Role check (FIXED)
   if (user.role !== "MERCENT") {
     return sendResponse(res, {
       statusCode: StatusCodes.FORBIDDEN,
@@ -151,9 +151,8 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     });
   }
 
-  // Safely extract _id
+  // 🆔 Merchant ID check
   const merchantId = user._id?.toString();
-
   if (!merchantId) {
     return sendResponse(res, {
       statusCode: StatusCodes.BAD_REQUEST,
@@ -162,10 +161,20 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     });
   }
 
+  // 🧪 cardCode validation
+  if (!cardCode || typeof cardCode !== "string") {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "Card code or promotion code is required",
+    });
+  }
+
+  // 🔍 Search digital card (cardCode OR promotionCode)
   const digitalCard =
     await DigitalCardService.getMerchantDigitalCardWithPromotions(
       merchantId,
-      cardCode as string
+      cardCode
     );
 
   if (!digitalCard) {
@@ -176,6 +185,7 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     });
   }
 
+  // ✅ Success response
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
@@ -183,6 +193,7 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     data: digitalCard,
   });
 });
+
 
 // // Type-safe request body
 // interface ApprovePromotionBody {

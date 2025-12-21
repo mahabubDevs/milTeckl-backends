@@ -161,6 +161,7 @@ const getPopularMerchantsFromDB = async () => {
     },
     { $sort: { avgRating: -1, totalRatings: -1 } },
     { $limit: 20 },
+
     {
       $lookup: {
         from: "users",
@@ -170,45 +171,24 @@ const getPopularMerchantsFromDB = async () => {
       },
     },
     { $unwind: "$merchant" },
+
     {
       $project: {
         _id: 1,
         avgRating: { $round: ["$avgRating", 2] },
         totalRatings: 1,
-        merchant: {
-          name: 1,
-          email: 1,
-          profile: 1,
-        },
+
+        // ✅ simple flat response
+        firstName: "$merchant.firstName",
+        email: "$merchant.email",
+        profile: "$merchant.profile",
       },
     },
   ]);
-  if (result.length === 0) {
-    return [
-      {
-        _id: "690edfe0180ea2417f4b470d",
-        avgRating: 4.5,
-        totalRatings: 12,
-        merchant: {
-          name: "Demo Merchant One",
-          email: "merchant1@example.com",
-          profile: "demo1.jpg",
-        },
-      },
-      {
-        _id: "demo-merchant-2",
-        avgRating: 4.2,
-        totalRatings: 9,
-        merchant: {
-          name: "Demo Merchant Two",
-          email: "merchant2@example.com",
-          profile: "demo2.jpg",
-        },
-      },
-    ];
-  }
-  return result;
+
+  return result.length ? result : [];
 };
+
 
 const getDetailsOfMerchant = async (merchantId: string) => {
   const merchant = await User.findById(merchantId)

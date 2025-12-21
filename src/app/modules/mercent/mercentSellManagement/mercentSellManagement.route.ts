@@ -39,7 +39,25 @@ router.get(
 );
 
 
-router.get("/merchant/:merchantId", auth(), mercentSellManagementController.getMerchantSales);
+// Get full transactions of a user (merchant)
+router.get(
+  "/transactions/:userId",
+  auth(),
+  mercentSellManagementController.getUserFullTransactions
+);
+
+router.get(
+  "/merchant",
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT),
+  mercentSellManagementController.getMerchantSales
+);
+
+router.get(
+  "/customer",
+  auth(USER_ROLES.MERCENT, USER_ROLES.VIEW_MERCENT,USER_ROLES.USER),
+  mercentSellManagementController.getMerchantCustomersList
+);
+
 
 // router.post(
 //   "/finalize-checkout",
