@@ -136,6 +136,7 @@ export interface IUser {
   lastActive: Date;
   socketIds: string[];
   points: number;
+  totalVisits: number;
 }
 
 export type UserModal = {

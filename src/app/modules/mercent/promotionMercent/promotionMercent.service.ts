@@ -191,6 +191,7 @@ const getPopularMerchantsFromDB = async () => {
 
 
 const getDetailsOfMerchant = async (merchantId: string) => {
+  await User.updateOne({ _id: merchantId }, { $inc: { totalVisits: 1 } });
   const merchant = await User.findById(merchantId)
     .select("firstName location profile photo about website address")
     .lean();
@@ -198,6 +199,8 @@ const getDetailsOfMerchant = async (merchantId: string) => {
   const promotions = await Promotion.find({ merchantId })
     .select("cardId name discountPercentage startDate endDate image status")
     .lean();
+
+
 
   return {
     merchant,

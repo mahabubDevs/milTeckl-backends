@@ -211,7 +211,11 @@ const userSchema = new Schema<IUser, UserModal>(
     points: {
       type: Number,
       default: 0,
-    }
+    },
+    totalVisits: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
