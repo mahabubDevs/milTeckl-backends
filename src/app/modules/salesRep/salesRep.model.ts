@@ -13,7 +13,9 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       ref: "Package",
       required: true,
     },
-
+    adminName: {
+      type: String,
+    },
     acknowledged: {
       type: Boolean,
       default: false,
