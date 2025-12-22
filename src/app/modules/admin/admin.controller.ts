@@ -66,17 +66,16 @@ const getAllCustomers = catchAsync(async (req: Request, res: Response) => {
 // near merchants controller
 const getNearbyMerchantsController = catchAsync(
   async (req: Request, res: Response) => {
-    const result = await AdminService.getNearbyMerchants(req.query);
+
+    const user = req.user as JwtPayload;
+    const result = await AdminService.getNearbyMerchants(req.query, user._id);
     sendResponse(res, {
-  statusCode: StatusCodes.OK,
-  success: true,
-  message: "Nearby merchants retrieved successfully",
-  data: result.merchants,
-  pagination: {
-    ...result.pagination,
-    totalPage: result.pagination.totalPages, // rename to singular
-  },
-});
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Nearby merchants retrieved successfully",
+      data: result,
+
+    });
 
   }
 );

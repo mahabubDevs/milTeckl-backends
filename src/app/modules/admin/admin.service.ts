@@ -99,24 +99,30 @@ const getAllMerchants = async (query: Record<string, unknown>) => {
 
 // near merchants service
 
-const getNearbyMerchants = async (query: IQuery) => {
-  const lat = query.lat ? Number(query.lat) : null;
-  const lng = query.lng ? Number(query.lng) : null;
-  const radius = query.radius ? Number(query.radius) : 10; // default 10 km
-  const page = query.page ? Number(query.page) : 1;
-  const limit = query.limit ? Number(query.limit) : 10;
-  const searchTerm = query.searchTerm ? String(query.searchTerm) : null;
-
-  if (!lat || !lng) {
-    throw new Error("Latitude and Longitude are required");
+const getNearbyMerchants = async (query: IQuery, userId: string) => {
+  const user = await User.findById(userId).select("location");
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
   }
 
+  const lng = user.location?.coordinates?.[0];
+  const lat = user.location?.coordinates?.[1];
+
+  if (lng == null || lat == null) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User location not found");
+  }
+
+  const radius = query.radius ? Number(query.radius) : 10; // km
+  const searchTerm = query.searchTerm ? String(query.searchTerm) : null;
   const radiusInMeters = radius * 1000;
 
   const pipeline: any[] = [
     {
       $geoNear: {
-        near: { type: "Point", coordinates: [lng, lat] },
+        near: {
+          type: "Point",
+          coordinates: [lng, lat],
+        },
         distanceField: "distance",
         spherical: true,
         maxDistance: radiusInMeters,
@@ -126,8 +132,9 @@ const getNearbyMerchants = async (query: IQuery) => {
       $project: {
         firstName: 1,
         profile: 1,
-        location: 1,
         distance: 1,
+        lng: { $arrayElemAt: ["$location.coordinates", 0] },
+        lat: { $arrayElemAt: ["$location.coordinates", 1] },
       },
     },
   ];
@@ -135,55 +142,40 @@ const getNearbyMerchants = async (query: IQuery) => {
   if (searchTerm) {
     pipeline.push({
       $match: {
-        $or: [{ firstName: { $regex: searchTerm, $options: "i" } }],
+        firstName: { $regex: searchTerm, $options: "i" },
       },
     });
   }
 
-  // Lookup ratings
-  pipeline.push({
-    $lookup: {
-      from: "ratings", // collection name in MongoDB
-      localField: "_id",
-      foreignField: "merchantId",
-      as: "ratings",
+  pipeline.push(
+    {
+      $lookup: {
+        from: "ratings",
+        localField: "_id",
+        foreignField: "merchantId",
+        as: "ratings",
+      },
     },
-  });
-
-  // Add avgRating and totalRatings
-  pipeline.push({
-    $addFields: {
-      totalRatings: { $size: "$ratings" },
-      avgRating: { $avg: "$ratings.rating" },
+    {
+      $addFields: {
+        totalRatings: { $size: "$ratings" },
+        avgRating: {
+          $cond: [
+            { $gt: [{ $size: "$ratings" }, 0] },
+            { $avg: "$ratings.rating" },
+            0,
+          ],
+        },
+      },
     },
-  });
-
-  // Sort nearest first
-  pipeline.push({ $sort: { distance: 1 } });
-
-  // Count total before skip/limit
-  const totalCountPipeline = [...pipeline, { $count: "total" }];
-  const totalCountResult = await User.aggregate(totalCountPipeline);
-  const total = totalCountResult[0]?.total || 0;
-
-  // Apply pagination
-  const skip = (page - 1) * limit;
-  pipeline.push({ $skip: skip }, { $limit: limit });
+    { $sort: { distance: 1 } }
+  );
 
   const merchants = await User.aggregate(pipeline);
 
-  const totalPages = Math.ceil(total / limit);
-
-  return {
-    merchants,
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages,
-    },
-  };
+  return merchants;
 };
+
 
 // ====== customer crue operations ====== //
 //==== single customer details ====//
