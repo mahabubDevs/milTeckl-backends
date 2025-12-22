@@ -47,6 +47,24 @@ const userSchema = new Schema<IUser, UserModal>(
       unique: true,
       required: false,
     },
+    referredInfo: {
+      _id: false,
+      type: {
+        referredId: {
+          type: String,
+          required: false,
+        },
+        referredBy: {
+          type: String,
+          required: false,
+        }
+      }
+
+    },
+    salesRep: {
+      type: String,
+      required: false,
+    },
     role: {
       type: String,
       enum: Object.values(USER_ROLES),
@@ -190,6 +208,14 @@ const userSchema = new Schema<IUser, UserModal>(
 
     lastActive: { type: Date, default: new Date() },
     socketIds: { type: [String], default: [] },
+    points: {
+      type: Number,
+      default: 0,
+    },
+    totalVisits: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import catchAsync from "../../../shared/catchAsync";
 import sendResponse from "../../../shared/sendResponse";
 import { AdminService } from "./admin.service";
+import { JwtPayload } from "jsonwebtoken";
 
 const createAdmin = catchAsync(async (req: Request, res: Response) => {
   const payload = req.body;
@@ -60,6 +61,27 @@ const getAllCustomers = catchAsync(async (req: Request, res: Response) => {
     pagination: result.pagination,
   });
 });
+
+
+// near merchants controller
+const getNearbyMerchantsController = catchAsync(
+  async (req: Request, res: Response) => {
+
+    const user = req.user as JwtPayload;
+    const result = await AdminService.getNearbyMerchants(req.query, user._id);
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "Nearby merchants retrieved successfully",
+      data: result,
+
+    });
+
+  }
+);
+
+
+
 const getAllMerchants = catchAsync(async (req: Request, res: Response) => {
   const result = await AdminService.getAllMerchants(req.query);
   sendResponse(res, {
@@ -220,9 +242,11 @@ const updateMerchantStatus = catchAsync(async (req, res) => {
   });
 });
 const updateMerchantApproveStatus = catchAsync(async (req, res) => {
+  const user = req.user as JwtPayload
   const result = await AdminService.updateMerchantApproveStatus(
     req.params.id,
-    req.body.approveStatus
+    req.body.approveStatus,
+    user._id
   );
 
   sendResponse(res, {
@@ -232,6 +256,15 @@ const updateMerchantApproveStatus = catchAsync(async (req, res) => {
     data: result,
   });
 });
+
+
+
+
+
+
+
+
+
 
 export const AdminController = {
   deleteAdmin,
@@ -251,4 +284,7 @@ export const AdminController = {
   deleteMerchant,
   updateMerchantStatus,
   updateMerchantApproveStatus,
+
+
+  getNearbyMerchantsController
 };

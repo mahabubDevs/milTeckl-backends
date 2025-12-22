@@ -9,6 +9,9 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
+import { generateCustomUserId } from "../user/user.utils";
+import { createUniqueReferralId } from "../../../util/generateRefferalId";
+import QueryBuilder from "../../../util/queryBuilder";
 
 // create user
 const createUserToDB = async (payload: IUser) => {
@@ -38,10 +41,16 @@ const createUserToDB = async (payload: IUser) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Phone already exists");
   }
 
+const referenceId = await createUniqueReferralId();
+  const customerId = await generateCustomUserId(USER_ROLES.MERCENT);
+
+
   const userData = {
     ...payload,
-     customUserId: uuidv4(), // auto generate
-     referenceId: uuidv4(),  // auto generate
+    //  customUserId: uuidv4(), // auto generate
+    //  referenceId: uuidv4(),  // auto generate
+    customUserId: customerId,
+    referenceId: referenceId,
     verified: true, // auto verified
   };
 
@@ -74,6 +83,10 @@ const createMerchantToDB = async (payload: any) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Phone already exists");
   }
 
+
+  const referenceId = await createUniqueReferralId();
+  const customerId = await generateCustomUserId(USER_ROLES.MERCENT);
+
   // 🔥 merchant data (any use, model change না করে)
   const merchantData: any = {
     ...payload,
@@ -83,8 +96,8 @@ const createMerchantToDB = async (payload: any) => {
     status: USER_STATUS.ACTIVE,
     verified: true,
 
-    customUserId: uuidv4(),
-    referenceId: uuidv4(),
+    customUserId: customerId,
+    referenceId: referenceId,
 
     // merchant specific (extra field — TS safe)
     businessName: payload.businessName,
@@ -93,6 +106,7 @@ const createMerchantToDB = async (payload: any) => {
     expiryDate: payload.expiryDate,
     tier: payload.tier,
     salesRep: payload.salesRep,
+    city: payload.city,
   };
 
   const result = await User.create(merchantData);
@@ -177,6 +191,98 @@ const toggleUserStatusFromDB = async (id: string) => {
   return user;
 };
 
+
+
+const getAllMerchants = async (query: Record<string, unknown>) => {
+  const baseQuery = User.find({ role: USER_ROLES.MERCENT });
+
+  const allMerchantsQuery = new QueryBuilder(baseQuery, query)
+    .search(["firstName", "lastName", "email", "phone"])
+    .filter()
+    .paginate()
+    .sort();
+
+  const allmerchants = await allMerchantsQuery.modelQuery.lean();
+  const pagination = await allMerchantsQuery.getPaginationInfo();
+
+  return {
+    allmerchants,
+    pagination,
+  };
+};
+
+
+
+const getSingleMerchant = async (id: string) => {
+  const merchant = await User.findOne({
+    _id: id,
+    role: USER_ROLES.MERCENT,
+  }).lean();
+
+  if (!merchant) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
+
+  return merchant;
+};
+
+
+const updateMerchant = async (
+  id: string,
+  payload: Partial<IUser>
+) => {
+  const merchant = await User.findOneAndUpdate(
+    { _id: id, role: USER_ROLES.MERCENT },
+    payload,
+    { new: true }
+  ).lean();
+
+  if (!merchant) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
+
+  return merchant;
+};
+
+
+const deleteMerchant = async (id: string) => {
+  const merchant = await User.findOneAndDelete({
+    _id: id,
+    role: USER_ROLES.MERCENT,
+  });
+
+  if (!merchant) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
+
+  return true;
+};
+   
+
+const toggleMerchantStatus = async (id: string) => {
+  const merchant = await User.findOne({
+    _id: id,
+    role: USER_ROLES.MERCENT,
+  });
+
+  if (!merchant) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
+  }
+
+  merchant.status =
+    merchant.status === USER_STATUS.ACTIVE
+      ? USER_STATUS.INACTIVE
+      : USER_STATUS.ACTIVE;
+
+  await merchant.save();
+
+  return {
+    id: merchant._id,
+    status: merchant.status,
+  };
+};
+
+
 export const UserService = {
   createUserToDB,
   createMerchantToDB,
@@ -185,4 +291,9 @@ export const UserService = {
   updateUserToDB,
   deleteUserFromDB,
   toggleUserStatusFromDB,
+  getSingleMerchant,
+  updateMerchant,
+  deleteMerchant,
+  toggleMerchantStatus,
+  getAllMerchants
 };

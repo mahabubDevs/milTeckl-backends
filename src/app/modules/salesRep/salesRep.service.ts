@@ -56,7 +56,7 @@ const updateUserAcknowledgeStatus = async (userId: string) => {
     );
   }
 };
-const generateToken = async (userId: string) => {
+const generateToken = async (userId: string, adminId: string) => {
   const user = await User.findById(userId).select("status");
 
   if (!user) {
@@ -69,11 +69,15 @@ const generateToken = async (userId: string) => {
 
   const token = generateCashToken();
 
+
+  const adminName = await User.findById(adminId).select("firstName lastName");
+
   const result = await SalesRep.findOneAndUpdate(
     { customerId: new Types.ObjectId(userId) },
     {
       token,
       tokenGenerateDate: new Date(),
+      adminName: `${adminName?.firstName} ${adminName?.lastName ?? ""}`.trim(),
     },
     { new: true, runValidators: true }
   );

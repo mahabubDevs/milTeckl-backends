@@ -10,24 +10,24 @@ const router = express.Router();
 
 router.post(
   "/",
-  auth(USER_ROLES.USER),
+  auth(),
   validateRequest(SalesRepValidation.createSalesRepDataZodSchema),
   SalesRepController.createSalesRepData
 );
 router.get(
   "/",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(),
   SalesRepController.getSalesRepData
 );
 router.patch(
   "/acknowledge/users/:id",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,USER_ROLES.ADMIN_SELL,USER_ROLES.ADMIN_REP),
   SalesRepController.updateUserAcknowledgeStatus
 );
 
 router.post(
   "/token/users/:id",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,USER_ROLES.ADMIN_SELL,USER_ROLES.ADMIN_REP),
   SalesRepController.generateToken
 );
 

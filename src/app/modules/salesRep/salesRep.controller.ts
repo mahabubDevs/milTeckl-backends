@@ -39,7 +39,8 @@ const updateUserAcknowledgeStatus = catchAsync(
   }
 );
 const generateToken = catchAsync(async (req: Request, res: Response) => {
-  const result = await SalesRepService.generateToken(req.params.id);
+  const user = req.user as JwtPayload;
+  const result = await SalesRepService.generateToken(req.params.id, user._id);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

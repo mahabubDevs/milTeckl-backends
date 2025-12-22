@@ -52,7 +52,7 @@ export interface ICompleteTransactionPayload {
 export interface RequestApprovalOptions {
   merchantId: string;
   digitalCardCode: string;
-  promotionId: string;
+  promotionId?: string | null; // optional now
   totalBill?: number;
   pointRedeemed?: number;
 }

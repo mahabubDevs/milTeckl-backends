@@ -31,9 +31,17 @@ export enum SUBSCRIPTION_STATUS {
   INACTIVE = "inActive",
 }
 
+// export enum CUSTOMER_SEGMENT {
+//   NEW = "new",
+//   RETURNING = "returning",
+//   LOYAL = "loyal",
+//   VIP = "vip",
+//   ALL = "all",
+// }
 export enum CUSTOMER_SEGMENT {
-  NEW = "new",
-  RETURNING = "returning",
-  LOYAL = "loyal",
-  VIP = "vip",
+  NEW_CUSTOMER = "new_customer",
+  RETURNING_CUSTOMER = "returning_customer",
+  LOYAL_CUSTOMER = "loyal_customer",
+  VIP_CUSTOMER = "vip_customer",
+  ALL_CUSTOMER = "all_customer",
 }

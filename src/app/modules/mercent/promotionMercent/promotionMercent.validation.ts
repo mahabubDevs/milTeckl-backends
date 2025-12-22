@@ -43,8 +43,8 @@ const getUserTierOfMerchantZodSchema = z.object({
 const sendNotificationToCustomerZodSchema = z.object({
   body: z.object({
     segment: z.nativeEnum(CUSTOMER_SEGMENT),
-    minPoints: z.number(),
-    radiusKm: z.number().min(1, { message: "Location radius is required" }),
+    minPoints: z.coerce.number(),
+    radiusKm: z.coerce.number().min(1, { message: "Location radius is required" }),
     message: z.string().min(1, { message: "Message is required" }),
 
   }),

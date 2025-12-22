@@ -7,6 +7,16 @@ import QueryBuilder from "../../../util/queryBuilder";
 import { sendNotification } from "../../../helpers/notificationsHelper";
 import { NotificationType } from "../notification/notification.model";
 
+
+
+interface IQuery {
+  lat?: number;
+  lng?: number;
+  radius?: number; // in km
+  [key: string]: any;
+}
+
+
 const createAdminToDB = async (payload: IUser): Promise<IUser> => {
   const createAdmin: any = await User.create(payload);
   if (!createAdmin) {
@@ -48,7 +58,7 @@ const updateUserStatus = async (id: string, status: USER_STATUS) => {
 
 const getAllCustomers = async (query: Record<string, unknown>) => {
   const baseQuery = User.find({ role: "USER" }).select(
-    "firstName lastName phone email status address "
+    "customUserId firstName lastName phone email status address referredInfo.referredBy"
   );
 
   const allCusomtersQuery = new QueryBuilder(baseQuery, query)
@@ -84,6 +94,88 @@ const getAllMerchants = async (query: Record<string, unknown>) => {
     pagination,
   };
 };
+
+
+
+// near merchants service
+
+const getNearbyMerchants = async (query: IQuery, userId: string) => {
+  const user = await User.findById(userId).select("location");
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  const lng = user.location?.coordinates?.[0];
+  const lat = user.location?.coordinates?.[1];
+
+  if (lng == null || lat == null) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User location not found");
+  }
+
+  const radius = query.radius ? Number(query.radius) : 10; // km
+  const searchTerm = query.searchTerm ? String(query.searchTerm) : null;
+  const radiusInMeters = radius * 1000;
+
+  const pipeline: any[] = [
+    {
+      $geoNear: {
+        near: {
+          type: "Point",
+          coordinates: [lng, lat],
+        },
+        distanceField: "distance",
+        spherical: true,
+        maxDistance: radiusInMeters,
+      },
+    },
+    {
+      $project: {
+        firstName: 1,
+        profile: 1,
+        distance: 1,
+        lng: { $arrayElemAt: ["$location.coordinates", 0] },
+        lat: { $arrayElemAt: ["$location.coordinates", 1] },
+      },
+    },
+  ];
+
+  if (searchTerm) {
+    pipeline.push({
+      $match: {
+        firstName: { $regex: searchTerm, $options: "i" },
+      },
+    });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: "ratings",
+        localField: "_id",
+        foreignField: "merchantId",
+        as: "ratings",
+      },
+    },
+    {
+      $addFields: {
+        totalRatings: { $size: "$ratings" },
+        avgRating: {
+          $cond: [
+            { $gt: [{ $size: "$ratings" }, 0] },
+            { $avg: "$ratings.rating" },
+            0,
+          ],
+        },
+      },
+    },
+    { $sort: { distance: 1 } }
+  );
+
+  const merchants = await User.aggregate(pipeline);
+
+  return merchants;
+};
+
 
 // ====== customer crue operations ====== //
 //==== single customer details ====//
@@ -200,7 +292,8 @@ const updateMerchantStatus = async (
 };
 const updateMerchantApproveStatus = async (
   id: string,
-  approveStatus: APPROVE_STATUS
+  approveStatus: APPROVE_STATUS,
+  adminId: string
 ) => {
   const merchant = await User.findById(id).lean();
   if (!merchant) {
@@ -215,11 +308,16 @@ const updateMerchantApproveStatus = async (
 
   }
   if (approveStatus === APPROVE_STATUS.APPROVED) {
+    const adminName = await User.findById(adminId).select("firstName lastName").lean()
+    if (!adminName) {
+      throw new ApiError(StatusCodes.NOT_FOUND, "Admin not found");
+    }
     data.status = USER_STATUS.ACTIVE
+    data.salesRep = `${adminName.firstName} ${adminName.lastName ?? ""}`.trim();
   }
 
 
-  await User.findByIdAndUpdate(
+  const result = await User.findByIdAndUpdate(
     id,
     data,
     { new: true }
@@ -228,6 +326,9 @@ const updateMerchantApproveStatus = async (
 
 
   if (approveStatus === APPROVE_STATUS.APPROVED) {
+
+
+
     await sendNotification({
       userIds: [merchant._id],
       title: "Congratulations! Your account Approved",
@@ -236,7 +337,7 @@ const updateMerchantApproveStatus = async (
     })
   }
 
-  return merchant;
+  return result;
 };
 
 export const AdminService = {
@@ -257,4 +358,7 @@ export const AdminService = {
   deleteMerchant,
   updateMerchantStatus,
   updateMerchantApproveStatus,
+
+
+  getNearbyMerchants
 };

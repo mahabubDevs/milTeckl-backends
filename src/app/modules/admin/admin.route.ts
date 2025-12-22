@@ -47,6 +47,8 @@ router.get(
   AdminController.getAllMerchants
 );
 
+router.get("/merchants/nearby", auth(), AdminController.getNearbyMerchantsController);
+
 //===singel merchant details ===//
 router.get(
   "/merchants/:id",
@@ -88,7 +90,7 @@ router.patch(
 //=== all customers ===//
 router.get(
   "/customers",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN ,USER_ROLES.VIEW_MERCENT),
   AdminController.getAllCustomers
 );
 

@@ -16,10 +16,20 @@ const getAuditLogs = catchAsync(async (req, res) => {
 
 
 const getAuditLogsByUser = catchAsync(async (req, res) => {
-  const { userId } = req.params;
+  // 🔐 logged-in user
+  const user = req.user as { _id: string };
+
+  if (!user?._id) {
+    return sendResponse(res, {
+      success: false,
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: "Unauthorized user",
+      data: null,
+    });
+  }
 
   const logs = await AuditService.getLogsByUserId(
-    userId,
+    user._id,
     req.query
   );
 
@@ -30,6 +40,7 @@ const getAuditLogsByUser = catchAsync(async (req, res) => {
     data: logs,
   });
 });
+
 
 
 
