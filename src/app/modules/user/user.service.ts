@@ -73,7 +73,7 @@ const createUserToDB = async (payload: CreateUserPayload): Promise<IUser> => {
     }
     referredInfo = {
       referredId: payload.referredId,
-      referredBy: `${referredUser.firstName} + " " + ${referredUser?.lastName ? referredUser?.lastName : ""}`,
+      referredBy: `${referredUser.firstName} ${referredUser?.lastName ? referredUser?.lastName : ""}`,
     };
   }
 
@@ -217,10 +217,24 @@ const getUserOnlineStatusFromDB = async (userId: string) => {
   };
 };
 
+const verifyReferral = async (referralId: string) => {
+
+
+  const referredUser = await User.findOne({ referenceId: referralId });
+  if (!referredUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Referred Id Invalied!");
+  }
+  return {
+    referredUserName: `${referredUser.firstName} ${referredUser.lastName ?? ""}`.trim(),
+
+  };
+};
+
 export const UserService = {
   createUserToDB,
   getUserProfileFromDB,
   updateProfileToDB,
   createAdminToDB,
   getUserOnlineStatusFromDB,
+  verifyReferral,
 };

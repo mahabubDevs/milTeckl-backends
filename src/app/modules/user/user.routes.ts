@@ -34,4 +34,5 @@ router.get(
   UserController.getUserOnlineStatus
 );
 
-export const UserRoutes = router;
+router.post("/verify-referral", auth(), UserController.verifyReferral);
+export const UserRoutes = router

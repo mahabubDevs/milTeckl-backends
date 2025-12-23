@@ -121,10 +121,24 @@ const getUserOnlineStatus = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const verifyReferral = catchAsync(async (req: Request, res: Response) => {
+
+
+  const result = await UserService.verifyReferral(req.body.referralId);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: "Refferal Id is valid",
+    data: result,
+  });
+});
+
 export const UserController = {
   createUser,
   createAdmin,
   getUserProfile,
   updateProfile,
   getUserOnlineStatus,
+  verifyReferral,
 };
