@@ -34,5 +34,5 @@ router.get(
   UserController.getUserOnlineStatus
 );
 
-router.post("/verify-referral", validateRequest(UserValidation.verifyReferralZodSchema), UserController.verifyReferral);
+
 export const UserRoutes = router

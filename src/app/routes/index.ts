@@ -30,6 +30,7 @@ import { AdminTierRoutes } from "../modules/adminSellandTier/point&TierSystem/ti
 
 import { NotificationRoutes } from "../modules/notification/notification.routes";
 import { PushRoutes } from "../modules/pushNotification/push.routes";
+import { ReferralRoutes } from "../modules/referral/referral.route";
 
 const router = express.Router();
 
@@ -62,6 +63,7 @@ const apiRoutes = [
   { path: "/push-notification", route: PushRoutes },
 
   { path: "/notifications", route: NotificationRoutes },
+  { path: "/referrals", route: ReferralRoutes },
 ];
 
 apiRoutes.forEach((route) => router.use(route.path, route.route));
