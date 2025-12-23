@@ -224,6 +224,7 @@ const verifyReferral = async (referralId: string) => {
   if (!referredUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Referred Id Invalied!");
   }
+  console.log(referredUser)
   return {
     referredUserName: `${referredUser.firstName} ${referredUser.lastName ?? ""}`.trim(),
 
