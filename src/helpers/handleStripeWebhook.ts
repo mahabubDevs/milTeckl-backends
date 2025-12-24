@@ -42,7 +42,7 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
                 }
 
                 const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
-
+console.log("inside checkout.session.completed webhook handler");
                 // Save subscription in DB
                 await SubscriptionService.activateSubscriptionInDB(userId, packageId, stripeSubscription);
             break;

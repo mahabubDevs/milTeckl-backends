@@ -65,13 +65,14 @@ export const handleSubscriptionCreated = async (data: Stripe.Subscription) => {
         });
 
         await newSubscription.save();
+        
 
         // Update user role
-        await User.findByIdAndUpdate(
-            existingUser._id,
-            { role: 'PAIDUSER', isSubscribed: true, hasAccess: true },
-            { new: true }
-        );
+        // await User.findByIdAndUpdate(
+        //     existingUser._id,
+        //     { role: 'PAIDUSER', isSubscribed: true, hasAccess: true },
+        //     { new: true }
+        // );
 
          // --- ADD NOTIFICATION ---
     //    await NotificationService.createNotificationToDB({

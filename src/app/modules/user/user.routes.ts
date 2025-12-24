@@ -15,6 +15,8 @@ router.post(
   UserController.createAdmin
 );
 
+router.get("/summary-counts", auth(), UserController.getUserSummaryCounts);
+
 router
   .route("/")
   .post(

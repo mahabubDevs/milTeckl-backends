@@ -292,21 +292,22 @@ const getUserTierOfMerchant = catchAsync(
 
 //catagory show pro
 
-const getPromotionsByUserCategory = catchAsync(
-  async (req: Request, res: Response) => {
-    const { categoryName } = req.query; // user sends ?categoryName=restaurant
+const getPromotionsByUserCategory = catchAsync(async (req: Request, res: Response) => {
+  const { categoryName } = req.query;
+  const userId = (req.user as any)?._id; // logged-in user
 
-    const promotions = await PromotionService.getPromotionsByUserCategory(
-      String(categoryName)
-    );
+  const promotions = await PromotionService.getPromotionsByUserCategory(
+    String(categoryName),
+    userId
+  );
 
-    res.status(200).json({
-      success: true,
-      message: "Promotions fetched successfully",
-      data: promotions,
-    });
-  }
-);
+  res.status(200).json({
+    success: true,
+    message: "Promotions fetched successfully",
+    data: promotions,
+  });
+});
+
 
 const sendNotificationToCustomer = catchAsync(async (req: Request, res: Response) => {
   let attachment;
