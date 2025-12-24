@@ -6,6 +6,10 @@ import stripe from "../../../config/stripe";
 import { User } from "../user/user.model";
 import Stripe from "stripe";
 import { Types } from "mongoose";
+import Referral from "../referral/referral.model";
+import PointTransaction from "../pointTransaction/pointTransaction.model";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
 
 const createSubscriptionSession = async (userId: string, packageId: string) => {
     const pkg = await Package.findById(packageId);
@@ -50,6 +54,32 @@ const activateSubscriptionInDB = async (
         console.log("⚠️ Subscription already exists in DB", existingSub._id);
         // Update user profile correctly
         await User.findByIdAndUpdate(userId, { subscription: "active" }, { new: true });
+
+        const result = await Referral.findOne({
+            referredUser: userId
+        })
+        if (result) {
+            await PointTransaction.create({
+                user: userId,
+                type: "EARN",
+                source: "REFERRAL",
+                referral: result._id,
+                points: 10,
+                note: "Referral points",
+            })
+            await PointTransaction.create({
+                user: result.referrer,
+                type: "EARN",
+                source: "REFERRAL",
+                referral: result._id,
+                points: 10,
+                note: "Referral points",
+            })
+
+            await User.findByIdAndUpdate(result.referrer, { points: { $inc: 10 } }, { new: true });
+            await User.findByIdAndUpdate(userId, { points: { $inc: 10 } }, { new: true });
+            sendNotification({ userIds: [result.referrer.toString(), userId.toString()], title: "Referral points", body: "You have earned 10 points for using referral code", type: NotificationType.REFERRAL });
+        }
         return existingSub;
     }
 
