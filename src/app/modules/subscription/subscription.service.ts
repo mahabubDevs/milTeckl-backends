@@ -26,8 +26,8 @@ const createSubscriptionSession = async (userId: string, packageId: string) => {
                 quantity: 1,
             },
         ],
-        success_url: `https://yourfrontend.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `https://yourfrontend.com/payment-cancel`,
+        success_url: `https://miltech-business-dashboard-api.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `https://miltech-business-dashboard-api.vercel.app/failed`,
         client_reference_id: userId,
         metadata: {
             packageId: pkg._id.toString(),
