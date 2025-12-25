@@ -37,6 +37,9 @@ const createUserToDB = async (
   // 🔒 Status default
   payload.status = USER_STATUS.ACTIVE;
 
+  // 🔒 Verify automatically true
+  payload.verified = true;
+
   const user = await User.create(payload);
   return user.toObject();
 };

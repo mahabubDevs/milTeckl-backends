@@ -100,7 +100,7 @@ const getNearbyMerchantsController = catchAsync(
 
 
 const getAllMerchants = catchAsync(async (req: Request, res: Response) => {
-  const result = await AdminService.getAllMerchants(req.query);
+  const result = await AdminService.getAllMerchants(req.query, req.user); // req.user পাঠানো
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,

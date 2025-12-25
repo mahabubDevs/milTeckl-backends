@@ -13,44 +13,53 @@ import { generateCustomUserId } from "../user/user.utils";
 import { createUniqueReferralId } from "../../../util/generateRefferalId";
 import QueryBuilder from "../../../util/queryBuilder";
 
+
+const ALLOWED_CREATOR_ROLES = [
+  USER_ROLES.USER,         // CUSTOMER
+  USER_ROLES.ADMIN_SELL, // VIEW MERCHANT
+  USER_ROLES.ADMIN,        // ADMIN
+  USER_ROLES.ADMIN_REP     // ADMIN_REP
+];
+
 // create user
 const createUserToDB = async (
   payload: IUser,
-  merchantId: string
+  creator?: any // logged-in user (merchant or admin)
 ) => {
-  if (!payload.email) {
-    throw new ApiError(400, "Email is required");
-  }
-
-  if (!payload.phone) {
-    throw new ApiError(400, "Phone number is required");
-  }
-
-  if (!payload.password) {
-    throw new ApiError(400, "Password is required");
-  }
+  if (!payload.email) throw new ApiError(400, "Email is required");
+  if (!payload.phone) throw new ApiError(400, "Phone number is required");
+  if (!payload.password) throw new ApiError(400, "Password is required");
 
   const isEmailExist = await User.isExistUserByEmail(payload.email);
-  if (isEmailExist) {
-    throw new ApiError(400, "Email already exists");
-  }
+  if (isEmailExist) throw new ApiError(400, "Email already exists");
 
   const isPhoneExist = await User.isExistUserByPhone(payload.phone);
-  if (isPhoneExist) {
-    throw new ApiError(400, "Phone already exists");
+  if (isPhoneExist) throw new ApiError(400, "Phone already exists");
+
+  const ALLOWED_CREATOR_ROLES = [
+    USER_ROLES.USER,
+    USER_ROLES.VIEW_MERCENT,
+    USER_ROLES.ADMIN,
+    USER_ROLES.ADMIN_REP
+  ];
+
+  // 🔐 Role validation
+  let role = USER_ROLES.USER; // default CUSTOMER
+  if (payload.role) {
+    if (!ALLOWED_CREATOR_ROLES.includes(payload.role as USER_ROLES)) {
+      throw new ApiError(400, "User can only be created with allowed roles");
+    }
+    role = payload.role as USER_ROLES;
   }
 
-  // 🔐 merchant can create only CUSTOMER
-  const role = USER_ROLES.USER;
-
   const referenceId = await createUniqueReferralId();
-  const customerId = await generateCustomUserId(role);
+  const customUserId = await generateCustomUserId(role);
 
   const userData = {
     ...payload,
     role,
-    merchantId, // ⭐ important
-    customUserId: customerId,
+    merchantId: creator?.role?.startsWith("MERCHANT") ? creator.id : null,
+    customUserId,
     referenceId,
     verified: true,
   };
@@ -58,6 +67,7 @@ const createUserToDB = async (
   const result = await User.create(userData);
   return result;
 };
+
 
 
 

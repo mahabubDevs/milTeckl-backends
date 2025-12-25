@@ -153,10 +153,13 @@ const getUserSummaryCounts = catchAsync(async (req: Request, res: Response) => {
   // 5️⃣ Minimal response
   res.status(StatusCodes.OK).json({
     success: true,
-    totalSpent,
-    totalDigitalCards,
-    totalPromotions,
-    subscriptionTitles
+    message: "User Summary fetched successfully",
+    data: {
+      totalSpent,
+      totalDigitalCards,
+      totalPromotions,
+      subscriptionTitles,
+    },
   });
 });
 

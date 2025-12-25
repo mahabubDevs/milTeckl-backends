@@ -87,24 +87,48 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
   };
 };
 
-const getAllMerchants = async (query: Record<string, unknown>) => {
-  const baseQuery = User.find({ role: USER_ROLES.MERCENT });
+const getAllMerchants = async (query: Record<string, unknown>, user: any) => {
+  const { address, service, radius, ...rest } = query; // lat/lng আর query থেকে বাদ
+  const { location: userLocation } = user; // auth middleware থেকে লগইন ইউজারের location
 
-  const allMerchantsQuery = new QueryBuilder(baseQuery, query)
+  let baseQuery = User.find({ role: USER_ROLES.MERCENT });
+
+  const allMerchantsQuery = new QueryBuilder(baseQuery, rest)
     .search(["firstName", "lastName", "email", "phone"])
     .filter()
-    .paginate()
-    .sort();
+    .sort()
+    .paginate();
+
+  if (address) {
+    allMerchantsQuery.modelQuery = allMerchantsQuery.modelQuery.find({
+      address: { $regex: address as string, $options: "i" },
+    });
+  }
+
+  if (service) {
+    allMerchantsQuery.modelQuery = allMerchantsQuery.modelQuery.find({
+      service: { $regex: service as string, $options: "i" },
+    });
+  }
+
+  if (userLocation && radius) {
+    allMerchantsQuery.modelQuery = allMerchantsQuery.modelQuery.find({
+      location: {
+        $geoWithin: {
+          $centerSphere: [userLocation.coordinates, Number(radius) / 6378.1],
+        },
+      },
+    });
+  }
 
   const [allmerchants, pagination] = await Promise.all([
     allMerchantsQuery.modelQuery.lean(),
     allMerchantsQuery.getPaginationInfo(),
   ]);
-  return {
-    allmerchants,
-    pagination,
-  };
+
+  return { allmerchants, pagination };
 };
+
 
 
 //============merchant export service ============//

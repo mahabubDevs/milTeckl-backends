@@ -11,7 +11,7 @@ import ApiError from "../../../errors/ApiErrors";
 // create user
 const createUser = catchAsync(async (req: any, res: any) => {
   const merchantId = req.user.id; // logged-in merchant
-
+console.log("🚀 Creating user under merchant:", req.body);
   const result = await UserService.createUserToDB(
     req.body,
     merchantId

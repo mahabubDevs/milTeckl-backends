@@ -11,6 +11,11 @@ router.get(
   AnalyticsController.getBusinessCustomerAnalytics
 );
 
+router.get(
+  "/business-customer/export",
+  auth(USER_ROLES.MERCENT),
+  AnalyticsController.exportBusinessCustomerAnalytics
+);
 
 
 
@@ -27,6 +32,14 @@ router.get(
   AnalyticsController.exportMerchantAnalytics
 );
 
+
+router.get(
+  "/merchant/monthly/export",
+  // auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  AnalyticsController.exportMerchantMonthlyAnalytics
+);
+
+
 router.get(
   "/customer",
   auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
@@ -37,6 +50,12 @@ router.get(
   "/customer/export",
   // auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AnalyticsController.exportCustomerAnalytics
+);
+
+router.get(
+  "/customer/monthly/export",
+  // auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  AnalyticsController.exportCustomerMonthlyData
 );
 
 
