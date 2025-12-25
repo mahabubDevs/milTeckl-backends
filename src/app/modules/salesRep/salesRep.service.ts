@@ -34,7 +34,6 @@ const createSalesRepData = async (user: JwtPayload, packageId: string) => {
     packageId,
   });
 
-  await User.findByIdAndUpdate(user._id, { status: USER_STATUS.INACTIVE });
 };
 const getSalesRepData = async (query: Record<string, unknown>) => {
   const baseQuery = SalesRep.find().populate(
@@ -60,8 +59,10 @@ const getSalesRepData = async (query: Record<string, unknown>) => {
 };
 
 const updateUserAcknowledgeStatus = async (userId: string) => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const result = await SalesRep.findOneAndUpdate(
-    { customerId: new Types.ObjectId(userId) },
+    { customerId: new Types.ObjectId(userId), createdAt: { $gte: sevenDaysAgo } },
     {
       acknowledged: true,
       acknowledgeDate: new Date(),
@@ -76,6 +77,8 @@ const updateUserAcknowledgeStatus = async (userId: string) => {
   }
 };
 const generateToken = async (userId: string, adminId: string) => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const user = await User.findById(userId).select("status");
 
   if (!user) {
@@ -92,7 +95,7 @@ const generateToken = async (userId: string, adminId: string) => {
   const adminName = await User.findById(adminId).select("firstName lastName");
 
   const result = await SalesRep.findOneAndUpdate(
-    { customerId: new Types.ObjectId(userId) },
+    { customerId: new Types.ObjectId(userId), createdAt: { $gte: sevenDaysAgo } },
     {
       token,
       tokenGenerateDate: new Date(),
@@ -110,7 +113,9 @@ const generateToken = async (userId: string, adminId: string) => {
   return { token };
 };
 const validateToken = async (userId: string, token: string) => {
-  const result = await SalesRep.findOne({ customerId: userId, token });
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const result = await SalesRep.findOne({ customerId: userId, token, createdAt: { $gte: sevenDaysAgo } });
 
   if (!result) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid request");
