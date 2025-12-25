@@ -7,6 +7,7 @@ import QueryBuilder from "../../../util/queryBuilder";
 import { sendNotification } from "../../../helpers/notificationsHelper";
 import { NotificationType } from "../notification/notification.model";
 import ExcelJS from "exceljs";
+import { Types } from "mongoose";
 
 
 interface IQuery {
@@ -47,15 +48,24 @@ const getAdminFromDB = async (): Promise<IUser[]> => {
   return admins;
 };
 const updateUserStatus = async (id: string, status: USER_STATUS) => {
-  await User.findByIdAndUpdate(
-    { id },
+  const updatedUser = await User.findByIdAndUpdate(
+    new Types.ObjectId(id),
     {
       status,
       lastStatusChanged: new Date(),
+    },
+    {
+      new: true,
+      runValidators: true,
     }
   );
-};
 
+  if (!updatedUser) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  return updatedUser;
+};
 const getAllCustomers = async (query: Record<string, unknown>) => {
   const baseQuery = User.find({ role: "USER" }).select(
     "customUserId firstName lastName phone email status address referredInfo.referredBy subscription"
@@ -416,7 +426,7 @@ const exportCustomers = async (
     .filter()
     .sort();
 
-const customers = await customersQuery.modelQuery.lean<any[]>();
+  const customers = await customersQuery.modelQuery.lean<any[]>();
 
 
 
