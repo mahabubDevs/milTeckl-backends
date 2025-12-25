@@ -8,7 +8,7 @@ import ApiError from "../../../errors/ApiErrors";
 
 const getMyReferredUser = async (userId: string) => {
     // 1. Get current user's location
-    const currentUser = await User.findById(userId).select("location");
+    const currentUser = await User.findById(userId).select("location referenceId");
     if (!currentUser) throw new ApiError(StatusCodes.BAD_REQUEST, "User not found");
 
     const currentLocation = currentUser?.location?.coordinates;
@@ -115,6 +115,8 @@ const getMyReferredUser = async (userId: string) => {
                 "user.firstName": 1,
                 "user.lastName": 1,
                 "user.profile": 1,
+                "user.address": 1,
+                "user.status": 1,
             },
         },
     ]);
@@ -123,8 +125,8 @@ const getMyReferredUser = async (userId: string) => {
     const totalReferrals = referrals.length;
     const totalPoints = referrals.reduce((acc, r) => acc + r.pointsEarned, 0);
     const totalJoin = referrals.filter(r => r.user).length;
-
-    return { referrals, totalReferrals, totalPoints, totalJoin };
+    const myReferenceId = currentUser.referenceId
+    return { referrals, totalReferrals, totalPoints, totalJoin, myReferenceId };
 };
 
 
