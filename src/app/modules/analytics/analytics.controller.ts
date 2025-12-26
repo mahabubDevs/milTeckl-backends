@@ -373,6 +373,10 @@ const getRevenuePerUser = catchAsync(async (req: Request, res: Response) => {
     data: result
   })
 })
+const exportRevenuePerUser = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportRevenuePerUser(res, startDate as string, endDate as string);
+});
 
 export const AnalyticsController = {
   getBusinessCustomerAnalytics,
@@ -385,6 +389,6 @@ export const AnalyticsController = {
   exportMerchantMonthlyAnalytics,
   exportCustomerMonthlyData,
   getPointRedeemedAnalytics,
-  getRevenuePerUser
-
+  getRevenuePerUser,
+  exportRevenuePerUser
 };

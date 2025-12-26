@@ -4,6 +4,7 @@ import { generateExcelBuffer } from "../../../helpers/excelExport";
 import ExcelJS from "exceljs";
 import PointTransaction from "../pointTransaction/pointTransaction.model";
 import { Subscription } from "../subscription/subscription.model";
+import { Response } from "express";
 
 const monthNames = [
   "Jan",
@@ -1091,6 +1092,44 @@ const getRevenuePerUser = async (
   };
 };
 
+const exportRevenuePerUser = async (
+  res: Response,
+  startDate?: string,
+  endDate?: string
+) => {
+  const { data } = await getRevenuePerUser(startDate, endDate);
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Customer Revenue");
+
+  sheet.columns = [
+    { header: "Customer ID", key: "customUserId", width: 25 },
+    { header: "Total Transactions", key: "totalTransactions", width: 22 },
+    { header: "Total Revenue", key: "totalRevenue", width: 20 },
+  ];
+
+  data.forEach(row => sheet.addRow(row));
+
+  // Summary row
+  sheet.addRow({});
+  sheet.addRow({
+    customUserId: "TOTAL",
+    totalTransactions: data.reduce((a, b) => a + b.totalTransactions, 0),
+    totalRevenue: data.reduce((a, b) => a + b.totalRevenue, 0),
+  });
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    "attachment; filename=customer-revenue.xlsx"
+  );
+
+  await workbook.xlsx.write(res);
+  res.end();
+};
 
 export const AnalyticsService = {
   getBusinessCustomerAnalytics,
@@ -1101,5 +1140,6 @@ export const AnalyticsService = {
   exportBusinessCustomerAnalytics,
   getMerchantAnalyticsMonthly,
   getPointRedeemedAnalytics,
-  getRevenuePerUser
+  getRevenuePerUser,
+  exportRevenuePerUser
 };
