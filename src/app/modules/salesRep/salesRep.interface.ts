@@ -11,6 +11,7 @@ export type ISalesRep = {
   paymentStatus: "paid" | "unpaid" | "expired";
   createdAt: Date;
   updatedAt: Date;
+  price: number;
 };
 
 export type SalesRepModel = Model<ISalesRep, Record<string, unknown>>;

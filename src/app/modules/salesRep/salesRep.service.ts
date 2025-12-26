@@ -12,12 +12,28 @@ import { Subscription } from "../subscription/subscription.model";
 import { Package } from "../package/package.model";
 
 const createSalesRepData = async (user: JwtPayload, packageId: string) => {
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // 🔍 Check if SalesRep exists in last 7 days
+  const existingSalesRep = await SalesRep.findOne({
+    customerId: user._id,
+    createdAt: { $gte: sevenDaysAgo },
+  });
+
+  if (existingSalesRep) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Sales representative already created within last 7 days"
+    );
+  }
+
   await SalesRep.create({
     customerId: user._id,
     packageId,
   });
 
-  await User.findByIdAndUpdate(user._id, { status: USER_STATUS.INACTIVE });
 };
 const getSalesRepData = async (query: Record<string, unknown>) => {
   const baseQuery = SalesRep.find().populate(
@@ -43,8 +59,10 @@ const getSalesRepData = async (query: Record<string, unknown>) => {
 };
 
 const updateUserAcknowledgeStatus = async (userId: string) => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const result = await SalesRep.findOneAndUpdate(
-    { customerId: new Types.ObjectId(userId) },
+    { customerId: new Types.ObjectId(userId), createdAt: { $gte: sevenDaysAgo } },
     {
       acknowledged: true,
       acknowledgeDate: new Date(),
@@ -59,6 +77,8 @@ const updateUserAcknowledgeStatus = async (userId: string) => {
   }
 };
 const generateToken = async (userId: string, adminId: string) => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const user = await User.findById(userId).select("status");
 
   if (!user) {
@@ -75,7 +95,7 @@ const generateToken = async (userId: string, adminId: string) => {
   const adminName = await User.findById(adminId).select("firstName lastName");
 
   const result = await SalesRep.findOneAndUpdate(
-    { customerId: new Types.ObjectId(userId) },
+    { customerId: new Types.ObjectId(userId), createdAt: { $gte: sevenDaysAgo } },
     {
       token,
       tokenGenerateDate: new Date(),
@@ -93,7 +113,9 @@ const generateToken = async (userId: string, adminId: string) => {
   return { token };
 };
 const validateToken = async (userId: string, token: string) => {
-  const result = await SalesRep.findOne({ customerId: userId, token });
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const result = await SalesRep.findOne({ customerId: userId, token, createdAt: { $gte: sevenDaysAgo } });
 
   if (!result) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid request");
@@ -105,15 +127,14 @@ const validateToken = async (userId: string, token: string) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid Token");
   }
 
+  const existingPackage = await Package.findById(result.packageId);
+  if (!existingPackage) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Package not found");
+  }
   result.paymentStatus = "paid";
+  result.price = existingPackage?.price;
   await result.save();
 
-  await User.findByIdAndUpdate(
-    userId,
-    { subscription: "active" },
-    { new: true }
-  );
-  const existingPackage = await Package.findById(result.packageId);
 
   // this is for test purpose
   const subscriptionData: Partial<ISubscription> = {
@@ -131,8 +152,14 @@ const validateToken = async (userId: string, token: string) => {
     })(),
     trxId: "N/A",
     status: "active",
+    source: "salesRep",
   };
   await Subscription.create({ ...subscriptionData });
+  await User.findByIdAndUpdate(
+    userId,
+    { subscription: "active" },
+    { new: true }
+  );
 };
 
 export const SalesRepService = {

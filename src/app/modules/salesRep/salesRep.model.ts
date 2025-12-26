@@ -34,6 +34,9 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       enum: ["paid", "unpaid", "expired"],
       default: "unpaid",
     },
+    price: {
+      type: Number,
+    },
   },
   { timestamps: true }
 );

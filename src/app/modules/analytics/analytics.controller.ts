@@ -43,6 +43,47 @@ const getBusinessCustomerAnalytics = catchAsync(
   }
 );
 
+
+const exportBusinessCustomerAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    const merchantId = (req.user as any)._id;
+
+    const {
+      startDate,
+      endDate,
+      subscriptionStatus,
+      customerName,
+      location,
+    } = req.query;
+
+    const buffer =
+      await AnalyticsService.exportBusinessCustomerAnalytics(
+        merchantId,
+        startDate as string,
+        endDate as string,
+        {
+          subscriptionStatus: subscriptionStatus as string,
+          customerName: customerName as string,
+          location: location as string,
+        }
+      );
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=business-customer-analytics.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+  }
+);
+
+
+
+
 const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
   const {
     startDate,
@@ -205,10 +246,226 @@ const exportMerchantAnalytics = catchAsync(
 );
 
 
+
+
+
+
+const exportMerchantMonthlyAnalytics = catchAsync(
+  async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query;
+
+    console.log("🚀 Monthly export request:", { startDate, endDate });
+
+    // ---------------- Fetch monthlyData ----------------
+    const result = await AnalyticsService.getMerchantAnalyticsMonthly(
+      startDate as string,
+      endDate as string,
+      1, // page ignored
+      0, // limit 0 = fetch all
+      {} // no filters needed, full monthly data
+    );
+
+    const monthlyData = result.data.monthlyData;
+
+    console.log("🔹 Monthly records count:", monthlyData.length);
+    console.log("🔸 Sample records:", monthlyData.slice(0, 5));
+
+    // ---------------- Excel Columns ----------------
+    const columns = [
+      { header: "Year", key: "year" },
+      { header: "Month", key: "monthName" },
+      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Points Redeemed", key: "pointsRedeemed" },
+      { header: "Users Count", key: "usersCount" },
+    ];
+
+    // ---------------- Generate Excel ----------------
+    const buffer = await generateExcelBuffer({
+      sheetName: "Monthly Analytics",
+      columns,
+      rows: monthlyData,
+    });
+
+    console.log("✅ Excel buffer generated, size:", buffer.length, "bytes");
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=merchant-monthly-analytics.xlsx`
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+  }
+);
+
+
+
+
+const exportCustomerMonthlyData = catchAsync(
+  async (req: Request, res: Response) => {
+    const { startDate, endDate } = req.query;
+
+    console.log("🚀 Customer Monthly export request:", { startDate, endDate });
+
+    // ---------------- Fetch monthlyData ----------------
+    const result = await AnalyticsService.getCustomerAnalytics(
+      startDate as string,
+      endDate as string,
+      1, // page ignored
+      0, // limit 0 = all data
+      {}
+    );
+
+    const monthlyData = result.data.monthlyData;
+
+    console.log("🔹 Monthly records count:", monthlyData.length);
+    console.log("🔸 Sample records:", monthlyData.slice(0, 5));
+
+    // ---------------- Excel Columns ----------------
+    const columns = [
+      { header: "Year", key: "year" },
+      { header: "Month", key: "monthName" },
+      { header: "Points Accumulated", key: "pointsAccumulated" },
+      { header: "Points Redeemed", key: "pointsRedeemed" },
+    ];
+
+    // ---------------- Generate Excel ----------------
+    const buffer = await generateExcelBuffer({
+      sheetName: "Customer Monthly Data",
+      columns,
+      rows: monthlyData,
+    });
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=customer-monthly-data.xlsx`
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.send(buffer);
+  }
+);
+
+
+const getPointRedeemedAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+  const result = await AnalyticsService.getPointRedeemedAnalytics({
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    page,
+    limit,
+  })
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Point redeemed analytics fetched successfully",
+    data: { data: result.data, timeRange: result.timeRange },
+    pagination: result.pagination
+  })
+})
+const exportPointRedeemedAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportPointRedeemedAnalytics(res, startDate as string, endDate as string);
+});
+const getRevenuePerUser = catchAsync(async (req: Request, res: Response) => {
+
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+  const result = await AnalyticsService.getRevenuePerUser({
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    page,
+    limit,
+  });
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Revenue per user analytics fetched successfully",
+    data: { data: result.data, timeRange: result.timeRange },
+    pagination: result.pagination
+  })
+})
+const exportRevenuePerUser = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportRevenuePerUser(res, startDate as string, endDate as string);
+});
+
+const getCashCollectionAnalytics = catchAsync(async (req: Request, res: Response) => {
+
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+  const result = await AnalyticsService.getCashCollectionAnalytics({
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    page,
+    limit,
+  });
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Cash collection analytics fetched successfully",
+    data: { data: result.data, timeRange: result.timeRange },
+    pagination: result.pagination
+  })
+})
+const exportCashCollectionAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportCashCollectionAnalytics(res, startDate as string, endDate as string);
+});
+
+
+const getCashReceivableAnalytics = catchAsync(async (req: Request, res: Response) => {
+
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+  const result = await AnalyticsService.getCashReceivableAnalytics({
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    page,
+    limit,
+  });
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Cash receivable analytics fetched successfully",
+    data: { data: result.data, timeRange: result.timeRange },
+    pagination: result.pagination
+  })
+})
+const exportCashReceivableAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportCashReceivableAnalytics(res, startDate as string, endDate as string);
+});
 export const AnalyticsController = {
   getBusinessCustomerAnalytics,
   getMerchantAnalytics,
   getCustomerAnalytics,
   exportMerchantAnalytics,
-  exportCustomerAnalytics
+
+  exportCustomerAnalytics,
+  exportBusinessCustomerAnalytics,
+  exportMerchantMonthlyAnalytics,
+  exportCustomerMonthlyData,
+  getPointRedeemedAnalytics,
+  exportPointRedeemedAnalytics,
+  getRevenuePerUser,
+  exportRevenuePerUser,
+  getCashCollectionAnalytics,
+  exportCashCollectionAnalytics,
+  getCashReceivableAnalytics,
+  exportCashReceivableAnalytics
 };
