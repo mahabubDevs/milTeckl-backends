@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import PointTransaction from "../pointTransaction/pointTransaction.model";
 import { Subscription } from "../subscription/subscription.model";
 import { Response } from "express";
+import { SalesRep } from "../salesRep/salesRep.model";
 
 const monthNames = [
   "Jan",
@@ -1131,6 +1132,71 @@ const exportRevenuePerUser = async (
   res.end();
 };
 
+const getCashCollectionAnalytics = async (
+  startDate?: string,
+  endDate?: string
+) => {
+  const matchStage: Record<string, any> = {
+    paymentStatus: "paid",
+  };
+
+  if (startDate || endDate) {
+    matchStage.createdAt = {};
+
+    if (startDate) {
+      matchStage.createdAt.$gte = new Date(startDate);
+    }
+
+    if (endDate) {
+      matchStage.createdAt.$lte = new Date(endDate);
+    }
+  }
+
+  const data = await SalesRep.aggregate([
+    { $match: matchStage },
+
+    {
+      $lookup: {
+        from: "users",
+        localField: "customerId",
+        foreignField: "_id",
+        as: "customer",
+      },
+    },
+    { $unwind: "$customer" },
+
+    {
+      $group: {
+        _id: "$customer._id",
+        customUserId: { $first: "$customer.customUserId" },
+        salesRep: { $first: "$adminName" },
+        totalTransactions: { $sum: 1 },
+        totalReceived: { $sum: "$price" },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+        customUserId: 1,
+        salesRep: 1,
+        totalTransactions: 1,
+        totalReceived: 1,
+      },
+    },
+
+    { $sort: { totalReceived: -1 } },
+  ]);
+
+  return {
+    timeRange: {
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+    },
+    data,
+  };
+};
+
 export const AnalyticsService = {
   getBusinessCustomerAnalytics,
   getMerchantAnalytics,
@@ -1141,5 +1207,6 @@ export const AnalyticsService = {
   getMerchantAnalyticsMonthly,
   getPointRedeemedAnalytics,
   getRevenuePerUser,
-  exportRevenuePerUser
+  exportRevenuePerUser,
+  getCashCollectionAnalytics
 };

@@ -127,15 +127,14 @@ const validateToken = async (userId: string, token: string) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid Token");
   }
 
+  const existingPackage = await Package.findById(result.packageId);
+  if (!existingPackage) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Package not found");
+  }
   result.paymentStatus = "paid";
+  result.price = existingPackage?.price;
   await result.save();
 
-  await User.findByIdAndUpdate(
-    userId,
-    { subscription: "active" },
-    { new: true }
-  );
-  const existingPackage = await Package.findById(result.packageId);
 
   // this is for test purpose
   const subscriptionData: Partial<ISubscription> = {
@@ -156,6 +155,11 @@ const validateToken = async (userId: string, token: string) => {
     source: "salesRep",
   };
   await Subscription.create({ ...subscriptionData });
+  await User.findByIdAndUpdate(
+    userId,
+    { subscription: "active" },
+    { new: true }
+  );
 };
 
 export const SalesRepService = {

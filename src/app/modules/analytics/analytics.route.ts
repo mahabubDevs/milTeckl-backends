@@ -61,5 +61,6 @@ router.get(
 router.get("/accountings/point-redeemed", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getPointRedeemedAnalytics)
 router.get("/accountings/revenue-per-user", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getRevenuePerUser)
 router.get("/accountings/revenue-per-user/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportRevenuePerUser)
+router.get("/accountings/cash-collection", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getCashCollectionAnalytics)
 
 export const AnalyticsRoutes = router;
