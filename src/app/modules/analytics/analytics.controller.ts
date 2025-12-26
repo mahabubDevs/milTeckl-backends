@@ -425,6 +425,31 @@ const exportCashCollectionAnalytics = catchAsync(async (req: Request, res: Respo
   await AnalyticsService.exportCashCollectionAnalytics(res, startDate as string, endDate as string);
 });
 
+
+const getCashReceivableAnalytics = catchAsync(async (req: Request, res: Response) => {
+
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+  const result = await AnalyticsService.getCashReceivableAnalytics({
+    startDate: req.query.startDate as string,
+    endDate: req.query.endDate as string,
+    page,
+    limit,
+  });
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Cash receivable analytics fetched successfully",
+    data: { data: result.data, timeRange: result.timeRange },
+    pagination: result.pagination
+  })
+})
+const exportCashReceivableAnalytics = catchAsync(async (req: Request, res: Response) => {
+  const { startDate, endDate } = req.query;
+  await AnalyticsService.exportCashReceivableAnalytics(res, startDate as string, endDate as string);
+});
 export const AnalyticsController = {
   getBusinessCustomerAnalytics,
   getMerchantAnalytics,
@@ -440,5 +465,7 @@ export const AnalyticsController = {
   getRevenuePerUser,
   exportRevenuePerUser,
   getCashCollectionAnalytics,
-  exportCashCollectionAnalytics
+  exportCashCollectionAnalytics,
+  getCashReceivableAnalytics,
+  exportCashReceivableAnalytics
 };

@@ -64,5 +64,6 @@ router.get("/accountings/revenue-per-user", auth(USER_ROLES.SUPER_ADMIN, USER_RO
 router.get("/accountings/revenue-per-user/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportRevenuePerUser)
 router.get("/accountings/cash-collection", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getCashCollectionAnalytics)
 router.get("/accountings/cash-collection/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportCashCollectionAnalytics)
-
+router.get("/accountings/cash-receivable", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getCashReceivableAnalytics)
+router.get("/accountings/cash-receivable/export", AnalyticsController.exportCashReceivableAnalytics)
 export const AnalyticsRoutes = router;
