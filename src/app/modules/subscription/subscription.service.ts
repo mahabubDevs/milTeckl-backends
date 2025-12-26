@@ -153,6 +153,13 @@ const activateSubscriptionInDB = async (
     }
     console.log("✅ User subscription updated in profile");
 
+
+    sendNotification({
+        userIds: [userId.toString()],
+        title: "Welcome to the app",
+        body: "You have successfully subscribed to our app. We are excited to have you on board!",
+        type: NotificationType.WELCOME
+    })
     return subscription;
 };
 
