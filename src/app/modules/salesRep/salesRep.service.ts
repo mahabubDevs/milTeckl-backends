@@ -4,12 +4,14 @@ import { User } from "../user/user.model";
 import QueryBuilder from "../../../util/queryBuilder";
 import ApiError from "../../../errors/ApiErrors";
 import { StatusCodes } from "http-status-codes";
-import { USER_STATUS } from "../../../enums/user";
+import { SUBSCRIPTION_STATUS, USER_ROLES, USER_STATUS } from "../../../enums/user";
 import { generateCashToken } from "../../../util/generateCashToken";
 import { ISubscription } from "../subscription/subscription.interface";
 import { Types } from "mongoose";
 import { Subscription } from "../subscription/subscription.model";
 import { Package } from "../package/package.model";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
 
 const createSalesRepData = async (user: JwtPayload, packageId: string) => {
 
@@ -32,6 +34,15 @@ const createSalesRepData = async (user: JwtPayload, packageId: string) => {
   await SalesRep.create({
     customerId: user._id,
     packageId,
+  });
+
+  const admins = await User.find({ role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] } }).select("_id");
+
+  sendNotification({
+    userIds: admins.map((admin) => admin._id),
+    title: "New customer added in sales rep",
+    body: "A customer requested to make payment by sales rep.",
+    type: NotificationType.SYSTEM,
   });
 
 };
@@ -157,7 +168,7 @@ const validateToken = async (userId: string, token: string) => {
   await Subscription.create({ ...subscriptionData });
   await User.findByIdAndUpdate(
     userId,
-    { subscription: "active" },
+    { subscription: SUBSCRIPTION_STATUS.ACTIVE },
     { new: true }
   );
 };
