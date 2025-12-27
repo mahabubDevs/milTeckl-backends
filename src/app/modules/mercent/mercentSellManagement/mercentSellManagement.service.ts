@@ -151,8 +151,7 @@ import { Rating } from "../../customer/rating/rating.model";
 //   return sell;
 // };
 
-// Revised checkout function
-// ... আগের imports
+
 
  const checkout = async (
   merchantId: string,
@@ -339,16 +338,21 @@ const requestApproval = async ({
 
     if (!promo) throw new Error("Promotion not found in digital card");
 
-    if (promo.status !== "pending") throw new Error("Promotion does not require approval");
+    if (!["pending", "unused"].includes(promo.status)) {
+      throw new Error("Promotion does not require approval");
+    }
 
     const selectedPromotion = await Promotion.findById(promotionId);
     discount = selectedPromotion?.discountPercentage || 0;
   }
 
-  const discountedBill = totalBill - (totalBill * discount) / 100;
-  const pointDiscount = pointRedeemed * POINT_REDEEM_RATE;
-  const finalBill = discountedBill - pointDiscount;
-  const pointsEarned = totalBill / POINT_EARN_RATE;
+  // Calculate bills
+  const discountedBill = parseFloat((totalBill - (totalBill * discount) / 100).toFixed(4));
+  const pointDiscount = parseFloat((pointRedeemed * POINT_REDEEM_RATE).toFixed(4));
+  const finalBill = parseFloat((discountedBill - pointDiscount).toFixed(4));
+
+  // ✅ pointsEarned calculated on finalBill
+  const pointsEarned = parseFloat((finalBill / POINT_EARN_RATE).toFixed(4));
 
   const formattedData = {
     merchantId,
@@ -360,7 +364,7 @@ const requestApproval = async ({
     discountedBill,
     pointRedeemed: parseFloat(pointRedeemed.toFixed(4)),
     pointDiscount,
-    finalBill: parseFloat(finalBill.toFixed(4)),
+    finalBill,
     pointsEarned,
   };
 
@@ -368,6 +372,7 @@ const requestApproval = async ({
   const io = (global as any).io;
   if (io) {
     io.emit(`getApplyRequest::${digitalCard.userId}`, formattedData);
+    console.log("================💠 Emitted requestApproval via socket =====================",digitalCard.userId);
   }
 
   return formattedData;
@@ -479,105 +484,109 @@ const getPointsHistory = async (
   digitalCardId: string,
   type: "all" | "earn" | "use" = "all"
 ) => {
-  try {
-    if (!Types.ObjectId.isValid(digitalCardId)) {
-      throw new Error("Invalid digitalCardId");
-    }
+  if (!Types.ObjectId.isValid(digitalCardId)) {
+    throw new Error("Invalid digitalCardId");
+  }
 
-    const typeSanitized = type?.trim().toLowerCase() as
-      | "all"
-      | "earn"
-      | "use";
+  const typeSanitized = type.trim().toLowerCase() as "all" | "earn" | "use";
 
-    const query: any = {
-      digitalCardId: new Types.ObjectId(digitalCardId),
-    };
+  const query: any = {
+    digitalCardId: new Types.ObjectId(digitalCardId),
+  };
 
-    if (typeSanitized === "earn") query.pointsEarned = { $gt: 0 };
-    if (typeSanitized === "use") query.pointRedeemed = { $gt: 0 };
+  if (typeSanitized === "earn") query.pointsEarned = { $gt: 0 };
+  if (typeSanitized === "use") query.pointRedeemed = { $gt: 0 };
 
-    const history = await Sell.find(query)
-      .sort({ createdAt: -1 })
-      .populate("merchantId", "businessName shopName firstName")
+  const history = await Sell.find(query)
+    .sort({ createdAt: -1 })
+    .populate("merchantId", "businessName shopName firstName profile")
+    .lean();
+
+  const result: any[] = [];
+
+  for (const tx of history) {
+    const merchant = tx.merchantId as
+      | {
+          _id?: Types.ObjectId;
+          businessName?: string;
+          shopName?: string;
+          firstName?: string;
+          profile?: string;
+        }
+      | undefined;
+
+    const merchantName =
+      merchant?.businessName ||
+      merchant?.shopName ||
+      merchant?.firstName ||
+      "";
+
+    // ⭐ find rating (only number)
+    const ratingDoc = await Rating.findOne({
+      userId: tx.userId,
+      merchantId: merchant?._id,
+      promotionId: tx.promotionId,
+      digitalCardId: tx.digitalCardId,
+    })
+      .select("rating")
       .lean();
 
-    const result: any[] = [];
+    const ratingValue: number | null = ratingDoc
+      ? ratingDoc.rating
+      : 0;
 
-    for (const tx of history) {
-      const merchant = tx.merchantId as
-        | { _id?: Types.ObjectId; businessName?: string; shopName?: string; firstName?: string }
-        | undefined;
-
-      const merchantName =
-        merchant?.businessName ||
-        merchant?.shopName ||
-        merchant?.firstName ||
-        "";
-
-      // 🔎 find rating for this transaction
-      const ratingDoc = await Rating.findOne({
-        merchantId: merchant?._id,
-        promotionId: tx.promotionId,
+    // ✅ Earn Points
+    if (
+      (typeSanitized === "all" || typeSanitized === "earn") &&
+      (tx.pointsEarned ?? 0) > 0
+    ) {
+      result.push({
+        id: tx._id,
         digitalCardId: tx.digitalCardId,
-        userId: tx.userId,
-      })
-        .select("rating comment")
-        .lean();
+        isEarn: true,
+        type: "earn",
+        points: tx.pointsEarned,
+        totalBill: tx.totalBill,
+        discountedBill: tx.discountedBill,
+        date: tx.createdAt,
+        promotionId: tx.promotionId,
 
-      const ratingInfo = ratingDoc
-        ? {
-            rating: ratingDoc.rating,
-            comment: ratingDoc.comment,
-          }
-        : null;
+        merchant: merchantName,
+        merchantProfile: merchant?.profile,
+        merchantId: merchant?._id,
 
-      // 🎯 Earn points
-      if (
-        (typeSanitized === "all" || typeSanitized === "earn") &&
-        (tx.pointsEarned ?? 0) > 0
-      ) {
-        result.push({
-          id: tx._id,
-          digitalCardId: tx.digitalCardId,
-          type: "earn",
-          points: tx.pointsEarned ?? 0,
-          totalBill: tx.totalBill,
-          discountedBill: tx.discountedBill,
-          date: tx.createdAt,
-          promotionId: tx.promotionId,
-          merchant: merchantName,
-          merchantId: merchant?._id,
-          // rating: ratingInfo, // ✅ added
-        });
-      }
-
-      // 🎯 Used points
-      if (
-        (typeSanitized === "all" || typeSanitized === "use") &&
-        (tx.pointRedeemed ?? 0) > 0
-      ) {
-        result.push({
-          id: tx._id,
-          digitalCardId: tx.digitalCardId,
-          type: "use",
-          points: tx.pointRedeemed ?? 0,
-          totalBill: tx.totalBill,
-          discountedBill: tx.discountedBill,
-          date: tx.createdAt,
-          promotionId: tx.promotionId,
-          merchant: merchantName,
-          merchantId: merchant?._id,
-          // rating: ratingInfo, // ✅ added
-        });
-      }
+        rating: ratingValue, // ✅ number | null
+      });
     }
 
-    return result;
-  } catch (error) {
-    console.error("Error in getPointsHistory:", error);
-    throw error;
+    // ✅ Used Points
+    if (
+      (typeSanitized === "all" || typeSanitized === "use") &&
+      (tx.pointRedeemed ?? 0) > 0
+    ) {
+      result.push({
+        id: tx._id,
+        digitalCardId: tx.digitalCardId,
+        isEarn: false,
+        type: "use",
+        points: tx.pointRedeemed,
+        totalBill: tx.totalBill,
+        discountedBill: tx.discountedBill,
+        date: tx.createdAt,
+        promotionId: tx.promotionId,
+
+        merchant: merchantName,
+        merchantProfile: merchant?.profile,
+        merchantId: merchant?._id,
+
+        rating: ratingValue, // ✅ number | null
+      });
+    }
   }
+
+  return result;
 };
+
 
 
 interface ITransactionPagination {

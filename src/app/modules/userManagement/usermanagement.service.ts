@@ -118,18 +118,33 @@ const createMerchantToDB = async (payload: any) => {
 };
 
 // get all users
-const getAllUsersFromDB = async (requestingUserRole: string) => {
-  // শুধু admin type users দেখবে
-  const adminRoles = ["ADMIN", "ADMIN_SEL", "ADMIN_REP"];
+// Service
+const getAllUsersFromDB = async (requestingUserRole: string, query: Record<string, any>) => {
+  // অনুমোদিত roles
+  const allowedRoles = ["ADMIN", "ADMIN_SEL", "ADMIN_REP", "SUPER_ADMIN", "MANAGER"];
 
-  if (!adminRoles.includes(requestingUserRole)) {
-    // যদি non-admin কেউ API call করে → forbidden
-    throw new ApiError(StatusCodes.FORBIDDEN, "Access denied");
+  if (!allowedRoles.includes(requestingUserRole)) {
+    throw new ApiError(403, "Access denied");
   }
 
-  // সব admin type users দেখাবে
-  const users = await User.find({ role: { $in: adminRoles } }).select("-password");
-  return users;
+  // Base query
+  let baseQuery = User.find({ role: { $in: allowedRoles } });
+
+  // QueryBuilder instance
+  const qb = new QueryBuilder(baseQuery, query)
+    .search(["firstName", "lastName", "email", "phone"]) // search
+    .filter() // filter
+    .sort() // sort
+    .paginate() // pagination
+    .fields(); // fields select
+
+  // Execute query
+  const users = await qb.modelQuery.lean();
+
+  // Pagination info
+  const pagination = await qb.getPaginationInfo();
+
+  return { users, pagination };
 };
 
 

@@ -42,7 +42,7 @@ const getYearlyRevenue = catchAsync(async (req: Request, res: Response) => {
 
 const getMerchantReport = catchAsync(async (req, res) => {
   const merchantId = (req.user as any)?._id;
-  const range = (req.query.range as string) || "7d"; // today, 7d, 1m, 3m
+  const range = (req.query.range as string) || "7d";
 
   const result = await DashboardMercentService.getReportForMerchantDashboard(
     merchantId,
@@ -57,6 +57,7 @@ const getMerchantReport = catchAsync(async (req, res) => {
   });
 });
 
+
 const getWeeklySellReport = catchAsync(async (req, res) => {
   const merchantId = (req.user as any)?._id;
 
@@ -69,6 +70,7 @@ const getWeeklySellReport = catchAsync(async (req, res) => {
     data: result,
   });
 });
+
 
 const getTodayNewMembers = catchAsync(async (req, res) => {
   const merchantId = (req.user as any)?._id;

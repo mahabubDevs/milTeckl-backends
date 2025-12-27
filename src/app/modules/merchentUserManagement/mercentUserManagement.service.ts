@@ -5,6 +5,7 @@ import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
+import { generateCustomUserId } from "../user/user.utils";
 
 
 
@@ -30,7 +31,6 @@ const createUserToDB = async (
       );
     }
   } else {
-    // default role
     payload.role = USER_ROLES.VIEW_MERCENT;
   }
 
@@ -40,9 +40,21 @@ const createUserToDB = async (
   // 🔒 Verify automatically true
   payload.verified = true;
 
+  // ✅ Generate customUserId
+  let roleForId = payload.role;
+  if (payload.role === USER_ROLES.VIEW_MERCENT) roleForId = USER_ROLES.MERCENT;
+  payload.customUserId = await generateCustomUserId(roleForId);
+
+  // ✅ Generate referenceId
+  if (!payload.referenceId) {
+    payload.referenceId = `REF-${Math.floor(10000 + Math.random() * 90000)}`;
+  }
+
   const user = await User.create(payload);
+  console.log("Created user:", user);
   return user.toObject();
 };
+
 
 // ---------------- Get Users By Merchant ----------------
 const getUsersByMerchant = async (loggedInUser: any, query: Record<string, any>) => {

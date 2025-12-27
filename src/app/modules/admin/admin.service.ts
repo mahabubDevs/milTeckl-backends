@@ -9,6 +9,7 @@ import { NotificationType } from "../notification/notification.model";
 import ExcelJS from "exceljs";
 import { Types } from "mongoose";
 import { Favorite } from "../customer/favorite/favorite.model";
+import { Rating } from "../customer/rating/rating.model";
 
 
 interface IQuery {
@@ -129,19 +130,32 @@ const getAllMerchants = async (query: Record<string, unknown>, user: any) => {
     Favorite.find({ userId }).select("merchantId").lean(),
   ]);
 
-  // 4️⃣ Create favorite map
   const favoriteMap = new Set(favorites.map(f => f.merchantId.toString()));
 
-  // 5️⃣ Mark favorites and apply filter if favorite query exists
+  // 4️⃣ Fetch average rating for all merchants at once using aggregation
+  const merchantIds = allmerchants.map(m => m._id);
+  const ratingsAgg = await Rating.aggregate([
+    { $match: { merchantId: { $in: merchantIds } } },
+    {
+      $group: {
+        _id: "$merchantId",
+        avgRating: { $avg: "$rating" },
+      },
+    },
+  ]);
+
+  const ratingMap = new Map<string, number>();
+  ratingsAgg.forEach(r => ratingMap.set(r._id.toString(), parseFloat(r.avgRating.toFixed(1))));
+
+  // 5️⃣ Combine favorite and avgRating
   let merchantsWithFavorite = allmerchants.map(merchant => ({
     ...merchant,
     isFavorite: favoriteMap.has((merchant._id as any).toString()),
+    rating: ratingMap.get((merchant._id as any).toString()) || 0,
   }));
 
   if (favorite === "true") {
     merchantsWithFavorite = merchantsWithFavorite.filter(m => m.isFavorite);
-  } else if (favorite === "false") {
-    merchantsWithFavorite = merchantsWithFavorite.filter(m => !m.isFavorite);
   }
 
   return { allmerchants: merchantsWithFavorite, pagination };

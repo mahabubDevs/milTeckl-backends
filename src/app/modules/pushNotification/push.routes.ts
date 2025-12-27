@@ -9,7 +9,7 @@ import validateRequest from "../../middlewares/validateRequest";
 const router = express.Router();
 
 // Admin send push
-router.post("/admin/notify", auth(USER_ROLES.ADMIN), PushController.sendNotificationToAll);
+router.post("/admin/notify", auth(USER_ROLES.ADMIN,USER_ROLES.SUPER_ADMIN), PushController.sendNotificationToAll);
 
 
 // Admin get all pushes
