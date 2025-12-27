@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import seedSuperAdmin from "./DB";
 import { socketHelper } from "./helpers/socketHelper";
 import { startCronJobs } from "./cronJobs";
+import { cleanupStaleSockets } from "./util/cleanupSocket";
 
 // uncaught exception
 process.on("uncaughtException", (error) => {
@@ -56,6 +57,9 @@ async function main() {
     socketHelper.socket(io);
     //@ts-ignore
     global.io = io;
+    setInterval(() => {
+      cleanupStaleSockets(io).catch(console.error);
+    }, 5 * 60 * 1000);
   } catch (error) {
     errorLogger.error(colors.red("🤢 Failed to connect Database"), error);
     process.exit(1);
