@@ -3,7 +3,7 @@ import { User } from "../user/user.model";
 import { USER_ROLES, USER_STATUS } from "../../../enums/user";
 import { ApplyRequest } from "../sellManagement/sellManagement.model";
 
-import mongoose from "mongoose";
+import mongoose, { PipelineStage } from "mongoose";
 import { Promotion } from "../promotionAdmin/promotionAdmin.model";
 import { Sell } from "../mercent/mercentSellManagement/mercentSellManagement.model";
 
@@ -62,8 +62,7 @@ const getTotalRevenue = async (query: any) => {
   const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
 
   while (current <= end) {
-    const monthStr = `${
-      [
+    const monthStr = `${[
         "Jan",
         "Feb",
         "Mar",
@@ -77,7 +76,7 @@ const getTotalRevenue = async (query: any) => {
         "Nov",
         "Dec",
       ][current.getMonth()]
-    } ${current.getFullYear()}`;
+      } ${current.getFullYear()}`;
     allMonths.push(monthStr);
     current.setMonth(current.getMonth() + 1);
   }
@@ -434,62 +433,57 @@ const getCustomerChartWeek = async (
   startDate: string,
   endDate: string
 ) => {
+  // 1️⃣ Convert query params to Date objects
   const from = new Date(startDate);
-  const to = new Date(endDate);
+  from.setUTCHours(0, 0, 0, 0);
 
-  const pipeline = [
+  const to = new Date(endDate);
+  to.setUTCHours(23, 59, 59, 999);
+
+  // 2️⃣ Build aggregation pipeline
+  const pipeline: PipelineStage[] = [
     {
       $match: {
         merchantId: new mongoose.Types.ObjectId(merchantId),
         createdAt: { $gte: from, $lte: to },
       },
     },
-
     {
       $group: {
         _id: {
-          year: { $year: "$createdAt" },
-          month: { $month: "$createdAt" },
-          day: { $dayOfMonth: "$createdAt" },
+          $dateToString: {
+            format: "%Y-%m-%d",
+            // Shift UTC to Pakistan local time (UTC+5)
+            date: { $add: ["$createdAt", 5 * 60 * 60 * 1000] },
+          },
         },
         totalRevenue: { $sum: "$discountedBill" },
       },
     },
-
     {
-      $sort: {
-        "_id.year": 1,
-        "_id.month": 1,
-        "_id.day": 1,
-      } as any,
+      $sort: { _id: 1 as 1 }, // TypeScript-safe
     },
   ];
 
   const data = await Sell.aggregate(pipeline);
 
-  // ---- format into a full 7-day series ----
-  const days = [];
-  const current = new Date(from);
+  // 3️⃣ Fill missing days with 0 revenue
+  const result: { date: string; revenue: number }[] = [];
+  const cursor = new Date(from);
 
-  while (current <= to) {
-    const y = current.getFullYear();
-    const m = current.getMonth() + 1;
-    const d = current.getDate();
+  while (cursor <= to) {
+    const key = cursor.toISOString().slice(0, 10);
+    const found = data.find(d => d._id === key);
 
-    const found = data.find(
-      (item) =>
-        item._id.year === y && item._id.month === m && item._id.day === d
-    );
-
-    days.push({
-      date: current.toISOString().slice(0, 10),
+    result.push({
+      date: key,
       revenue: found?.totalRevenue || 0,
     });
 
-    current.setDate(current.getDate() + 1);
+    cursor.setDate(cursor.getDate() + 1);
   }
 
-  return days;
+  return result;
 };
 
 export const DashboardMercentService = {
