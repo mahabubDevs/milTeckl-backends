@@ -153,7 +153,7 @@ import { Rating } from "../../customer/rating/rating.model";
 
 
 
- const checkout = async (
+const checkout = async (
   merchantId: string,
   digitalCardCode: string,
   totalBill: number,
@@ -189,7 +189,7 @@ import { Rating } from "../../customer/rating/rating.model";
     if (promoIndex === -1) throw new Error("Promotion not added to this DigitalCard");
 
     const promo = digitalCard.promotions[promoIndex];
-    
+
     if (promo.status === "pending") {
       throw new Error("User approval needed for this promotion");
     }
@@ -279,6 +279,23 @@ import { Rating } from "../../customer/rating/rating.model";
     pointsEarned,
     status: "completed",
   });
+
+  if (pointsEarned > 0) {
+    await sendNotification({
+      userIds: [digitalCard.userId.toString()],
+      title: "Points Earned",
+      body: `You have earned ${pointsEarned} points for your purchase. Digital Card ID: ${digitalCard.cardCode}`,
+      type: NotificationType.POINTS,
+    });
+  }
+  if (pointRedeemed > 0) {
+    await sendNotification({
+      userIds: [digitalCard.userId.toString()],
+      title: "Points Redeemed",
+      body: `You have redeemed ${pointRedeemed} points for your purchase. Digital Card ID: ${digitalCard.cardCode}`,
+      type: NotificationType.POINTS,
+    });
+  }
   console.log("💠 Transaction Saved ID:", sell._id.toString());
 
   return sell;
@@ -372,7 +389,7 @@ const requestApproval = async ({
   const io = (global as any).io;
   if (io) {
     io.emit(`getApplyRequest::${digitalCard.userId}`, formattedData);
-    console.log("================💠 Emitted requestApproval via socket =====================",digitalCard.userId);
+    console.log("================💠 Emitted requestApproval via socket =====================", digitalCard.userId);
   }
 
   return formattedData;
@@ -507,12 +524,12 @@ const getPointsHistory = async (
   for (const tx of history) {
     const merchant = tx.merchantId as
       | {
-          _id?: Types.ObjectId;
-          businessName?: string;
-          shopName?: string;
-          firstName?: string;
-          profile?: string;
-        }
+        _id?: Types.ObjectId;
+        businessName?: string;
+        shopName?: string;
+        firstName?: string;
+        profile?: string;
+      }
       | undefined;
 
     const merchantName =
