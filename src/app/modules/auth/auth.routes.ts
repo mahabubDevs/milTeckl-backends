@@ -151,6 +151,6 @@ router.delete(
 //     }
 // );
 
-router.post("/google", AuthController.googleLogin)
+router.post("/google", validateRequest(AuthValidation.googleLoginZodSchema), AuthController.googleLogin)
 
 export const AuthRoutes = router;

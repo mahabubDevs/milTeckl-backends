@@ -301,7 +301,7 @@ const resetPasswordToDB = async (token: string, payload: IAuthResetPassword) => 
     throw new ApiError(StatusCodes.BAD_REQUEST, "New password and Confirm password doesn't match!");
   }
 
-  const isSamePassword = await bcrypt.compare(newPassword,isExistUser.password || '');
+  const isSamePassword = await bcrypt.compare(newPassword, isExistUser.password || '');
   if (isSamePassword) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Please provide a different password from the previous one');
   }
@@ -629,22 +629,29 @@ const googleLoginToDB = async (idToken: string) => {
   let user = await User.findOne({ email });
 
   if (!user) {
-
     const referenceId = await createUniqueReferralId();
     const customUserId = await generateCustomUserId(USER_ROLES.USER);
+
     const userData = {
       referenceId,
       customUserId,
       email,
-      firstname: name,
-      avatar: picture,
+      firstName: name,
+      profile: picture,
       googleId: sub,
-      authProvider: "google",
-      isVerified: true,
-    }
-    user = await User.create(userData);
-  }
+      authProviders: ["google"],
+      verified: true,
+    };
 
+    user = await User.create(userData);
+  } else if (!user.googleId) {
+    // Link Google account if user exists but doesn't have googleId
+    user.googleId = sub;
+    if (!user.authProviders.includes("google")) {
+      user.authProviders.push("google");
+    }
+    await user.save();
+  }
 
   const accessToken = jwtHelper.createToken(
     { id: user._id, role: user.role, email: user.email, phoneNumber: user.phone },
@@ -653,7 +660,7 @@ const googleLoginToDB = async (idToken: string) => {
   );
 
   return { accessToken };
-}
+};
 
 export const AuthService = {
   // verifyEmailToDB,
