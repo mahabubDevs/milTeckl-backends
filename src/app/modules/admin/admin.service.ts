@@ -10,6 +10,7 @@ import ExcelJS from "exceljs";
 import { Types } from "mongoose";
 import { Favorite } from "../customer/favorite/favorite.model";
 import { Rating } from "../customer/rating/rating.model";
+import { sendPushNotification } from "../../../helpers/sendPushNotification";
 
 
 interface IQuery {
@@ -387,14 +388,37 @@ const updateMerchant = async (id: string, payload: Record<string, unknown>) => {
 
 //==== delete merchant ====//
 const deleteMerchant = async (id: string) => {
-  const merchant = await User.findByIdAndDelete(id).lean();
+  console.log("Delete Merchant called for ID:", id);
 
+  const merchant = await User.findById(id).lean();
   if (!merchant) {
+    console.log("Merchant not found in DB");
     throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
   }
 
+  console.log("Merchant found:", merchant.firstName, merchant.email, merchant.fcmToken);
+
+  // 1️⃣ Send push notification
+  if (merchant.fcmToken) {
+    console.log("Sending push notification to:", merchant.fcmToken);
+    await sendPushNotification(
+      merchant.fcmToken,
+      "Account Deleted",
+      "Your merchant account has been deleted by Admin."
+    );
+    console.log("Push notification sent");
+  } else {
+    console.log("No FCM token found, skipping notification");
+  }
+
+  // 2️⃣ Delete merchant
+  const deleted = await User.findByIdAndDelete(id);
+  console.log("Merchant deleted from DB:", deleted?._id);
+
   return merchant;
 };
+
+
 
 //==== merchant status update ====//
 

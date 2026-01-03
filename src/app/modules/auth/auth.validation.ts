@@ -80,12 +80,18 @@ const createChangePasswordZodSchema = z
     path: ["body", "confirmPassword"],
   }) as unknown as AnyZodObject;
 
-const createVerifyPhoneZodSchema = z.object({
-  body: z.object({
-    phone: z.string({ required_error: 'Phone number is required' }),
-    oneTimeCode: z.number({ required_error: 'One time code is required' })
-  })
+const createVerifyOtpZodSchema = z.object({
+    body: z.object({
+        identifier: z.string({ required_error: "Phone number or email is required" })
+            .refine((val) => {
+                const phoneRegex = /^[0-9]{6,15}$/;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return phoneRegex.test(val) || emailRegex.test(val);
+            }, { message: "Identifier must be a valid phone number or email" }),
+        oneTimeCode: z.number({ required_error: "OTP is required" }),
+    }),
 });
+
 
 
 const googleLoginZodSchema = z.object({
@@ -102,6 +108,6 @@ export const AuthValidation = {
   createLoginZodSchema,
   createResetPasswordZodSchema,
   createChangePasswordZodSchema,
-  createVerifyPhoneZodSchema,
+  createVerifyOtpZodSchema,
   googleLoginZodSchema
 };

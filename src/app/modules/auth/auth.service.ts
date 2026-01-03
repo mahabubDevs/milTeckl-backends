@@ -99,9 +99,9 @@ const loginUserFromDB = async (payload: ILoginData) => {
 
 //forget password
 const forgetPasswordToDB = async (identifier: string) => {
-
   const isEmail = identifier.includes("@");
 
+  // 1️⃣ Find user by email or phone
   const user = isEmail
     ? await User.findOne({ email: identifier })
     : await User.findOne({ phone: identifier });
@@ -110,32 +110,52 @@ const forgetPasswordToDB = async (identifier: string) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  // 1️⃣ Generate OTP
+  // 2️⃣ Generate OTP
   const otp = generateOTP();
 
-  // 2️⃣ Save OTP (same structure)
   user.authentication = user.authentication || {};
-  user.authentication.resetOTP = {
-    code: otp,
-    expireAt: new Date(Date.now() + 3 * 60000),
-  };
-  user.authentication.resetVia = isEmail ? "email" : "phone";
   user.authentication.isResetPassword = true;
+
+  if (isEmail) {
+    // 📧 Email OTP
+    user.authentication.emailOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60000),
+    };
+    user.authentication.resetVia = "email";
+  } else {
+    // 📱 Phone OTP
+    user.authentication.phoneOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60000),
+    };
+    user.authentication.resetVia = "phone";
+  }
 
   await user.save();
 
-  // 3️⃣ Send OTP (same style)
-  // if (isEmail) {
-  //   await sendResetPasswordEmail(user.email, otp);
-  // } else {
-  //   await sendOtp(user.phone, otp.toString());
-  // }
+  // 3️⃣ Send OTP
+  if (isEmail) {
+    const values = {
+      name: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      otp: otp,
+      email: user.email ?? ""
+    };
+
+    const resetPasswordTemplate = emailTemplate.resetPassword(values);
+    await emailHelper.sendEmail(resetPasswordTemplate);
+  } else {
+    // Phone OTP (existing system)
+    await sendOtp(user.phone!, otp.toString());
+  }
 
   return {
     identifier,
     via: user.authentication.resetVia,
   };
 };
+
 
 
 
@@ -224,57 +244,65 @@ const forgetPasswordToDB = async (identifier: string) => {
 
 
 // verifyPhoneOtpToDB.ts
-const verifyPhoneOtpToDB = async (payload: IVerifyPhone) => {
-  const { phone, oneTimeCode } = payload;
-  console.log("verifyPhoneOtpToDB called with:", payload);
+const verifyOtpToDB = async (payload: { identifier: string, oneTimeCode: number }) => {
+    const { identifier, oneTimeCode } = payload;
 
-  // 1️⃣ Find user by phone number
-  const user = await User.findOne({ phone }).select("+authentication");
-  if (!user) throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+    const isEmail = identifier.includes("@");
 
-  // 2️⃣ Validate OTP
-  if (!oneTimeCode) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Please provide OTP sent to your phone");
-  }
+    // 1️⃣ Find user by email or phone
+    const user = isEmail
+        ? await User.findOne({ email: identifier }).select("+authentication")
+        : await User.findOne({ phone: identifier }).select("+authentication");
 
-  const otpInfo = user.authentication?.phoneOTP;
-  if (!otpInfo || otpInfo.code !== oneTimeCode) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "You provided wrong OTP");
-  }
+    if (!user) throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
 
-  if (!otpInfo.expireAt || otpInfo.expireAt < new Date()) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "OTP already expired, request new one");
-  }
-
-  // 3️⃣ Mark phone as verified & clear OTP
-  if (!user.verified) {
-    user.verified = true;
-    if (user.authentication) {
-      delete user.authentication.phoneOTP;
-      user.authentication.isResetPassword = true; // enable reset flow
-    } else {
-      user.authentication = { isResetPassword: true } as any;
+    // 2️⃣ Validate OTP
+    if (!oneTimeCode) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "Please provide OTP sent to your identifier");
     }
+
+    const otpInfo = isEmail ? user.authentication?.emailOTP : user.authentication?.phoneOTP;
+
+    if (!otpInfo || otpInfo.code !== oneTimeCode) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "You provided wrong OTP");
+    }
+
+    if (!otpInfo.expireAt || otpInfo.expireAt < new Date()) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "OTP already expired, request new one");
+    }
+
+    // 3️⃣ Mark verified & clear OTP
+    if (!user.verified) user.verified = true;
+
+    if (user.authentication) {
+        if (isEmail) delete user.authentication.emailOTP;
+        else delete user.authentication.phoneOTP;
+
+        user.authentication.isResetPassword = true; // allow reset flow
+    } else {
+        user.authentication = { isResetPassword: true } as any;
+    }
+
     await user.save();
-  }
 
-  // 4️⃣ Generate JWT token
-  const accessToken = jwtHelper.createToken(
-    { id: user._id, role: user.role, email: user.email, phoneNumber: user.phone },
-    config.jwt.jwt_secret!,
-    config.jwt.jwt_expire_in!
-  );
+    // 4️⃣ Generate JWT access token
+    const accessToken = jwtHelper.createToken(
+        { id: user._id, role: user.role, email: user.email, phoneNumber: user.phone },
+        config.jwt.jwt_secret!,
+        config.jwt.jwt_expire_in!
+    );
 
-  // 5️⃣ Generate reset token (for password reset)
-  const resetToken = cryptoToken();
-  await ResetToken.create({
-    user: user._id,
-    token: resetToken,
-    expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
-  });
+    // 5️⃣ Generate reset token (for password reset)
+    const resetToken = cryptoToken();
+    await ResetToken.create({
+        user: user._id,
+        token: resetToken,
+        expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+    });
 
-  return { message: "Phone verified successfully", accessToken, resetToken };
+    return { message: "OTP verified successfully", accessToken, resetToken };
 };
+
 
 
 
@@ -532,31 +560,66 @@ const deleteOwnUserAccount = async (userId: string, password: string) => {
 };
 // sendPhoneOtpToDB.ts
 // sendPhoneOtpToDB.ts
-const sendPhoneOtpToDB = async (phone: string) => {
-  // 1️⃣ Find existing user by phone
-  const user = await User.findOne({ phone }).select("+authentication");
+const resendOtpToDB = async (identifier: string) => {
+  const isEmail = identifier.includes("@");
+
+  // 1️⃣ Find user
+  const user = isEmail
+    ? await User.findOne({ email: identifier }).select("+authentication")
+    : await User.findOne({ phone: identifier }).select("+authentication");
+
   if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist with this phone number");
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `User doesn't exist with this ${isEmail ? "email" : "phone"}`
+    );
   }
 
   // 2️⃣ Generate OTP
   const otp = generateOTP();
 
-  // 3️⃣ Ensure authentication object exists
+  // 3️⃣ Ensure authentication object
   user.authentication = user.authentication || {};
-  user.authentication.phoneOTP = {
-    code: otp,
-    expireAt: new Date(Date.now() + 3 * 60 * 1000), // 3 min
-  };
+  user.authentication.isResetPassword = true;
 
-  // 4️⃣ Save OTP to DB
+  // 4️⃣ Save OTP
+  if (isEmail) {
+    user.authentication.emailOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60 * 1000),
+    };
+    user.authentication.resetVia = "email";
+  } else {
+    user.authentication.phoneOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60 * 1000),
+    };
+    user.authentication.resetVia = "phone";
+  }
+
   await user.save();
 
-  // 5️⃣ (Optional) Send OTP via Twilio
-  // await sendOtp(phone, otp.toString());
+  // 5️⃣ Send OTP
+  if (isEmail) {
+    const values = {
+      name: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      otp,
+      email: user.email ?? "",
+    };
 
-  return { phone, otp };
+    const template = emailTemplate.resetPassword(values);
+    await emailHelper.sendEmail(template);
+  } else {
+    await sendOtp(user.phone!, otp.toString());
+  }
+
+  return {
+    identifier,
+    via: user.authentication.resetVia,
+  };
 };
+
 
 
 
@@ -703,8 +766,8 @@ export const AuthService = {
   // socialLoginFromDB,
   deleteUserFromDB,
   deleteOwnUserAccount,
-  sendPhoneOtpToDB,
-  verifyPhoneOtpToDB,
+  resendOtpToDB,
+  verifyOtpToDB,
   uploadDocumentImagesToDB,
   archiveUserInDB,
   googleLoginToDB

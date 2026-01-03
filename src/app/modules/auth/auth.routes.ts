@@ -32,10 +32,10 @@ router.post(
 //     AuthController.resendVerificationEmail
 // );
 router.post(
-    '/phone-otp',
-    // auth(USER_ROLES.ADMIN, USER_ROLES.USER),
-    AuthController.sendPhoneOtp
+  '/resend-otp',
+  AuthController.resendOtp
 );
+
 // router.post(
 //     '/resend-email-otp',
 //     AuthController.resendVerificationEmail
@@ -64,23 +64,21 @@ router.post(
 // );
 
 router.post(
-    '/verify-phone',
+    '/verify-otp',
     async (req: Request, res: Response, next: NextFunction) => {
-
         try {
-            const { phone, oneTimeCode } = req.body;
+            const { identifier, oneTimeCode } = req.body;
 
-            req.body = { phone, oneTimeCode: Number(oneTimeCode) };
+            req.body = { identifier, oneTimeCode: Number(oneTimeCode) };
             next();
-
         } catch (error) {
             return res.status(500).json({ message: "Failed to convert string to number" });
         }
     },
-    // auth(),
-    validateRequest(AuthValidation.createVerifyPhoneZodSchema),
-    AuthController.verifyPhone
+    validateRequest(AuthValidation.createVerifyOtpZodSchema),
+    AuthController.verifyOtp
 );
+
 
 router.post(
     '/reset-password',
