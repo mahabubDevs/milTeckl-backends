@@ -611,57 +611,80 @@ const archiveUserInDB = async (userId: string) => {
 };
 
 
-const googleLoginToDB = async (idToken: string) => {
-  const client = new OAuth2Client(config.social.google_client_id);
+const googleClient = new OAuth2Client(config.social.google_client_id);
 
-  const ticket = await client.verifyIdToken({
+export const googleLoginToDB = async (idToken: string) => {
+  const ticket = await googleClient.verifyIdToken({
     idToken,
     audience: config.social.google_client_id,
   });
 
   const payload = ticket.getPayload();
-  if (!payload?.email) {
-    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid Google token");
+
+  if (!payload?.email || !payload.email_verified) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid or unverified Google account");
   }
 
-  const { email, name, picture, sub } = payload;
+  const email = payload.email.toLowerCase();
+  const googleId = payload.sub;
 
+  let isFirstLogin = false;
   let user = await User.findOne({ email });
 
-  if (!user) {
-    const referenceId = await createUniqueReferralId();
-    const customUserId = await generateCustomUserId(USER_ROLES.USER);
+  //  Prevent Google ID mismatch
+  if (user?.googleId && user.googleId !== googleId) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Google account mismatch");
+  }
 
-    const userData = {
+  //  First-time Google signup
+  if (!user) {
+    const [referenceId, customUserId] = await Promise.all([
+      createUniqueReferralId(),
+      generateCustomUserId(USER_ROLES.USER),
+    ]);
+
+    user = await User.create({
       referenceId,
       customUserId,
       email,
-      firstName: name,
-      profile: picture,
-      googleId: sub,
+      firstName: payload.name,
+      profile: payload.picture,
+      googleId,
       authProviders: ["google"],
       verified: true,
-    };
+      role: USER_ROLES.USER,
+    });
 
-    user = await User.create(userData);
-  } else if (!user.googleId) {
-    // Link Google account if user exists but doesn't have googleId
-    user.googleId = sub;
-    if (!user.authProviders.includes("google")) {
-      user.authProviders.push("google");
+    isFirstLogin = true;
+  }
+
+  //  Link Google to existing non-password user
+  else if (!user.googleId) {
+    if (user.authProviders.includes("local")) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        "Account exists. Login with password to link Google."
+      );
     }
+
+    user.googleId = googleId;
+    user.authProviders.push("google");
     await user.save();
   }
 
+
   const accessToken = jwtHelper.createToken(
-    { id: user._id, role: user.role, email: user.email, phoneNumber: user.phone },
+    { id: user._id, role: user.role, email: user.email },
     config.jwt.jwt_secret!,
     config.jwt.jwt_expire_in!
   );
 
-  return { accessToken };
+  return {
+    accessToken,
+    subscription: user.subscription,
+    isFirstLogin,
+  };
 };
-
 export const AuthService = {
   // verifyEmailToDB,
   loginUserFromDB,
