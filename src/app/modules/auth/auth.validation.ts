@@ -1,4 +1,5 @@
 import { z, AnyZodObject } from 'zod';
+import { USER_ROLES } from '../../../enums/user';
 
 const createVerifyEmailZodSchema = z.object({
   body: z.object({
@@ -89,7 +90,8 @@ const createVerifyPhoneZodSchema = z.object({
 
 const googleLoginZodSchema = z.object({
   body: z.object({
-    idToken: z.string({ required_error: 'ID token is required' })
+    idToken: z.string({ required_error: 'ID token is required' }),
+    role: z.enum([USER_ROLES.MERCENT]).optional()
   })
 });
 

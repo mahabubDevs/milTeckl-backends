@@ -247,8 +247,8 @@ const archiveUser = catchAsync(async (req: Request, res: Response) => {
 
 
 const googleLogin = catchAsync(async (req: Request, res: Response) => {
-    const { idToken } = req.body;
-    const result = await AuthService.googleLoginToDB(idToken);
+    const { idToken, role } = req.body;
+    const result = await AuthService.googleLoginToDB(idToken, role);
 
     sendResponse(res, {
         success: true,

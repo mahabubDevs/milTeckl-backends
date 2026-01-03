@@ -620,7 +620,7 @@ const archiveUserInDB = async (userId: string) => {
 
 const googleClient = new OAuth2Client(config.social.google_client_id);
 
-export const googleLoginToDB = async (idToken: string) => {
+export const googleLoginToDB = async (idToken: string, role: string) => {
   const ticket = await googleClient.verifyIdToken({
     idToken,
     audience: config.social.google_client_id,
@@ -647,7 +647,7 @@ export const googleLoginToDB = async (idToken: string) => {
   if (!user) {
     const [referenceId, customUserId] = await Promise.all([
       createUniqueReferralId(),
-      generateCustomUserId(USER_ROLES.USER),
+      generateCustomUserId(role === USER_ROLES.MERCENT ? USER_ROLES.MERCENT : USER_ROLES.USER),
     ]);
 
     user = await User.create({
@@ -655,11 +655,11 @@ export const googleLoginToDB = async (idToken: string) => {
       customUserId,
       email,
       firstName: payload.name,
-      profile: payload.picture,
+      profile: payload.picture ?? null,
       googleId,
       authProviders: ["google"],
       verified: true,
-      role: USER_ROLES.USER,
+      role: role === USER_ROLES.MERCENT ? USER_ROLES.MERCENT : USER_ROLES.USER,
     });
 
     isFirstLogin = true;
