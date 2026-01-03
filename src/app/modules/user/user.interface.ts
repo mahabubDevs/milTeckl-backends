@@ -16,18 +16,33 @@ export interface IStripeAccountInfo {
 export interface IAuthenticationProps {
   isResetPassword?: boolean;
 
-  // Email OTP
+  // ✅ Identify OTP channel
+  resetVia?: "phone" | "email";
+
+  // ✅ Generic OTP (used for signup / forgot)
+  resetOTP?: {
+    code?: number;
+    expireAt?: Date;
+  };
+
+  // 🔹 Email OTP (existing - keep)
   emailOTP?: {
     code?: number;
     expireAt?: Date;
   };
 
-  // Phone OTP
+  // 🔹 Phone OTP (existing - keep)
   phoneOTP?: {
     code?: number;
     expireAt?: Date;
   };
 }
+
+
+
+
+
+
 
 // export interface IUserPreferences {
 //   datingIntentions?: ("Life partner" | "Long-Term Relationship" | "Short-time Relationship" | "Does Not Matter")[];

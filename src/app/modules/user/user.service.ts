@@ -194,26 +194,49 @@ const updateProfileToDB = async (
   payload: Partial<IUser>
 ): Promise<Partial<IUser | null>> => {
   const { _id } = user;
+
   const isExistUser = await User.isExistUserById(_id);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  //unlink file here
-  if (payload.profile) {
+  // unlink old files
+  if (payload.profile && isExistUser.profile) {
     unlinkFile(isExistUser.profile);
   }
-  if (payload.photo) {
+
+  if (payload.photo && isExistUser.photo) {
     unlinkFile(isExistUser.photo);
   }
 
-  const updateDoc = await User.findOneAndUpdate({ _id: _id }, payload, {
-    new: true,
-    runValidators: true,
-  });
+  try {
+    const updateDoc = await User.findOneAndUpdate(
+      { _id },
+      payload,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
-  return updateDoc;
+    return updateDoc;
+  } catch (error: any) {
+    /* -----------------------------
+       🔴 Handle Duplicate Key Error
+    ------------------------------*/
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0];
+
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        `This ${field} already exists`
+      );
+    }
+
+    throw error;
+  }
 };
+
 
 const getUserOnlineStatusFromDB = async (userId: string) => {
   const user = await User.findById(userId);

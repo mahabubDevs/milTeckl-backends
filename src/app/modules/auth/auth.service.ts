@@ -98,38 +98,45 @@ const loginUserFromDB = async (payload: ILoginData) => {
 };
 
 //forget password
-const forgetPasswordToDB = async (phone: string) => {
-  // 1️⃣ Find user by phone
-  const user = await User.findOne({ phone }).select('+phone');
+const forgetPasswordToDB = async (identifier: string) => {
+
+  const isEmail = identifier.includes("@");
+
+  const user = isEmail
+    ? await User.findOne({ email: identifier })
+    : await User.findOne({ phone: identifier });
+
   if (!user) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  // 2️⃣ Generate OTP
+  // 1️⃣ Generate OTP
   const otp = generateOTP();
 
-  console.log("Generated OTP for password reset:", otp);
-  // 3️⃣ Save OTP in DB under phoneOTP
+  // 2️⃣ Save OTP (same structure)
   user.authentication = user.authentication || {};
-  user.authentication.phoneOTP = {
+  user.authentication.resetOTP = {
     code: otp,
-    expireAt: new Date(Date.now() + 3 * 60 * 1000), // 3 min validity
+    expireAt: new Date(Date.now() + 3 * 60000),
   };
-  // mark that this authentication flow is for resetting password
+  user.authentication.resetVia = isEmail ? "email" : "phone";
   user.authentication.isResetPassword = true;
+
   await user.save();
 
-  // // 4️⃣ Send OTP via Twilio
-  // try {
-  //     await sendOtp(user.phone, String(otp));
-  //     console.log(`OTP sent to phone ${user.phone}: ${otp}`);
-  // } catch (error) {
-  //     console.error("Failed to send OTP via Twilio:", error);
-  //     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, "Failed to send OTP, try again");
+  // 3️⃣ Send OTP (same style)
+  // if (isEmail) {
+  //   await sendResetPasswordEmail(user.email, otp);
+  // } else {
+  //   await sendOtp(user.phone, otp.toString());
   // }
 
-  return { phone: user.phone, otp: otp };
+  return {
+    identifier,
+    via: user.authentication.resetVia,
+  };
 };
+
 
 
 

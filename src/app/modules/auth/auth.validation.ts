@@ -23,14 +23,19 @@ const createLoginZodSchema = z.object({
 
 const createForgetPasswordZodSchema = z.object({
   body: z.object({
-    phone: z
-      .string({ required_error: 'Phone number is required' })
+    identifier: z
+      .string({ required_error: "Phone number or email is required" })
       .refine((val) => {
-        const phoneRegex = /^[0-9]{6,15}$/; // adjust length as needed
-        return phoneRegex.test(val);
-      }, { message: "Invalid phone number" })
-  })
+        const phoneRegex = /^[0-9]{6,15}$/; // phone
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // email
+
+        return phoneRegex.test(val) || emailRegex.test(val);
+      }, {
+        message: "Identifier must be a valid phone number or email",
+      }),
+  }),
 });
+
 
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
@@ -87,6 +92,8 @@ const googleLoginZodSchema = z.object({
     idToken: z.string({ required_error: 'ID token is required' })
   })
 });
+
+
 export const AuthValidation = {
   createVerifyEmailZodSchema,
   createForgetPasswordZodSchema,
