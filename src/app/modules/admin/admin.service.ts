@@ -477,7 +477,17 @@ const updateMerchantApproveStatus = async (
 
   if (approveStatus === APPROVE_STATUS.APPROVED) {
 
-
+if (merchant.fcmToken) {
+    console.log("Sending push notification to:", merchant.fcmToken);
+    await sendPushNotification(
+      merchant.fcmToken,
+      "Account Approved",
+      "Your merchant account has been approved by Admin."
+    );
+    console.log("Push notification sent");
+  } else {
+    console.log("No FCM token found, skipping notification");
+  }
 
     await sendNotification({
       userIds: [merchant._id],

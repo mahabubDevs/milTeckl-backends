@@ -18,6 +18,8 @@ import { createUniqueReferralId } from "../../../util/generateRefferalId";
 import { sendOtp } from "../../../config/m3sms";
 import { generateCustomUserId } from "./user.utils";
 import Referral from "../referral/referral.model";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
 
 
 
@@ -33,6 +35,7 @@ const createAdminToDB = async (payload: any): Promise<IUser> => {
   if (isExistAdmin) {
     throw new ApiError(StatusCodes.CONFLICT, "This Email already taken");
   }
+  // create admin data
   const referenceId = await createUniqueReferralId();
   const adminData = {
     ...payload,
@@ -143,6 +146,15 @@ const createUserToDB = async (payload: CreateUserPayload): Promise<IUser> => {
   } else {
     console.warn("⚠️ No phone number found for user:", createUser._id);
   }
+
+  const superAdmin = await User.findOne({ role: USER_ROLES.SUPER_ADMIN  }).select("_id");
+  sendNotification({
+    userIds: [superAdmin!._id.toString()],
+    title: "A new user has registered",
+    body: `User ${createUser.firstName} has registered with the role ${createUser.role}.`,
+    type: NotificationType.SYSTEM,
+  });
+
 
   return createUser;
 };

@@ -355,6 +355,7 @@ const requestApproval = async ({
     // Find DigitalCard which has this promotion
     digitalCard = await DigitalCard.findOne({
       merchantId,
+      cardCode: digitalCardCode, 
       "promotions.promotionId": promotion._id,
       "promotions.status": { $in: ["pending", "unused"] },
       "promotions.usedAt": null,
@@ -418,6 +419,7 @@ const requestApproval = async ({
   if (io) {
     io.emit(`getApplyRequest::${digitalCard.userId}`, formattedData);
     console.log("================💠 Emitted requestApproval via socket =====================", digitalCard.userId);
+    
   }
 
   return formattedData;
