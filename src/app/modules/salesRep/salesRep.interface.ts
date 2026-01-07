@@ -9,6 +9,7 @@ export type ISalesRep = {
   salesRepName?: string;
   salesRepReferralId?: string;
   subscriptionStatus: "active" | "inActive";
+  subscriptionStatusChangedDate?: Date;
   tokenGenerateDate?: Date;
   paymentStatus: "paid" | "unpaid" | "expired";
   createdAt: Date;

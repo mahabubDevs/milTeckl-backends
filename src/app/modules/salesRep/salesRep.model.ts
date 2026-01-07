@@ -42,6 +42,9 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       enum: ["active", "inActive"],
       default: "inActive",
     },
+    subscriptionStatusChangedDate: {
+      type: Date,
+    },
     price: {
       type: Number,
     },

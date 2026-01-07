@@ -30,9 +30,11 @@ const createSalesRepData = async (user: JwtPayload, packageId: string) => {
     return null;
   }
 
+  const price = await Package.findById(packageId).select("price");
   await SalesRep.create({
     customerId: user._id,
     packageId,
+    price: price?.price,
   });
 
   const admins = await User.find({ role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] } }).select("_id");
@@ -48,7 +50,7 @@ const createSalesRepData = async (user: JwtPayload, packageId: string) => {
 const getSalesRepData = async (query: Record<string, unknown>) => {
   const baseQuery = SalesRep.find().populate(
     "customerId",
-    "customUserId salesRepName salesRepReferralId firstName lastName email phone  paymentStatus subscriptionStatus lastStatusChanged"
+    "customUserId firstName lastName email phone  paymentStatus subscription"
   );
 
   const salesRepQuery = new QueryBuilder(baseQuery, query)
@@ -104,15 +106,15 @@ const generateToken = async (id: string) => {
   if (salesRep.token) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Token already generated");
   }
-  const user = await User.findById(salesRep.customerId).select("status");
+  // const user = await User.findById(salesRep.customerId).select("status");
 
-  if (!user) {
-    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
-  }
+  // if (!user) {
+  //   throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  // }
 
-  if (user.status !== USER_STATUS.ACTIVE) {
-    throw new ApiError(StatusCodes.FORBIDDEN, "User is not active");
-  }
+  // if (user.status !== USER_STATUS.ACTIVE) {
+  //   throw new ApiError(StatusCodes.FORBIDDEN, "User is not active");
+  // }
 
   const token = generateCashToken();
 
@@ -279,6 +281,7 @@ const activateAccount = async (id: string) => {
     { new: true }
   );
   salesRep.subscriptionStatus = SUBSCRIPTION_STATUS.ACTIVE;
+  salesRep.subscriptionStatusChangedDate = new Date();
   await salesRep.save();
 
   await sendNotification({
@@ -349,6 +352,7 @@ const deactivateAccount = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, "Sales rep not found");
   }
   salesRep.subscriptionStatus = SUBSCRIPTION_STATUS.INACTIVE;
+  salesRep.subscriptionStatusChangedDate = new Date();
   await salesRep.save();
 
   const user = await User.findById(salesRep.customerId);
