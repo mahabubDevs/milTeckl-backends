@@ -280,9 +280,12 @@ const activateAccount = async (id: string) => {
     { subscription: SUBSCRIPTION_STATUS.ACTIVE },
     { new: true }
   );
-  salesRep.subscriptionStatus = SUBSCRIPTION_STATUS.ACTIVE;
-  salesRep.subscriptionStatusChangedDate = new Date();
-  await salesRep.save();
+
+  await SalesRep.findByIdAndUpdate(
+    id,
+    { subscriptionStatus: SUBSCRIPTION_STATUS.ACTIVE, subscriptionStatusChangedDate: new Date() },
+    { new: true, upsert: true }
+  );
 
   await sendNotification({
     userIds: [salesRep.customerId.toString()],
@@ -347,13 +350,13 @@ const activateAccount = async (id: string) => {
 }
 
 const deactivateAccount = async (id: string) => {
-  const salesRep = await SalesRep.findById(id);
+  const salesRep = await SalesRep.findByIdAndUpdate(id, {
+    subscriptionStatus: SUBSCRIPTION_STATUS.INACTIVE,
+    subscriptionStatusChangedDate: new Date(),
+  }, { new: true, upsert: true });
   if (!salesRep) {
     throw new ApiError(StatusCodes.NOT_FOUND, "Sales rep not found");
   }
-  salesRep.subscriptionStatus = SUBSCRIPTION_STATUS.INACTIVE;
-  salesRep.subscriptionStatusChangedDate = new Date();
-  await salesRep.save();
 
   const user = await User.findById(salesRep.customerId);
   if (!user) {
