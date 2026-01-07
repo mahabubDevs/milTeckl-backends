@@ -95,6 +95,14 @@ const updateUserAcknowledgeStatus = async (dataId: string, salesRepId: string) =
       "No sales rep found for the given user"
     );
   }
+
+
+  // await sendNotification({
+  //   userIds: [result.customerId],
+  //   title: "Sales rep acknowledged",
+  //   body: "Your sales rep has acknowledged your request.",
+  //   type: NotificationType.SYSTEM,
+  // })
 };
 const generateToken = async (id: string) => {
 
@@ -293,6 +301,9 @@ const activateAccount = async (id: string) => {
     body: "You have successfully subscribed to our app. We are excited to have you on board!",
     type: NotificationType.WELCOME
   })
+  io.emit(`salesActivation::${salesRep.customerId.toString()}`, {
+    status: "active"
+  });
 
   const referralResult = await Referral.findOne({
     referredUser: salesRep.customerId
