@@ -91,7 +91,10 @@ const loginUserFromDB = async (payload: ILoginData) => {
           pages: user.pages || [],
           subscription: user.subscription,
           isUserWaiting: user.isUserWaiting,
-          location: user.location,
+          location: user.location ?? {
+            type: 'Point',
+            coordinates: [0, 0],
+          },
 
 
         }
