@@ -13,26 +13,25 @@ const createLoginZodSchema = z.object({
     identifier: z
       .string({ required_error: 'Email or phone is required' })
       .refine((val) => {
-        // check if it looks like email or phone
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const phoneRegex = /^[0-9]{6,15}$/; // adjust length if needed
+        const phoneRegex = /^\+[1-9]\d{6,14}$/; // any country code
         return emailRegex.test(val) || phoneRegex.test(val);
-      }, { message: "Must be a valid email or phone number" }),
+      }, { message: "Must be a valid email or international phone number (+countryCode)" }),
     password: z.string({ required_error: 'Password is required' })
   })
 });
+
 
 const createForgetPasswordZodSchema = z.object({
   body: z.object({
     identifier: z
       .string({ required_error: "Phone number or email is required" })
       .refine((val) => {
-        const phoneRegex = /^[0-9]{6,15}$/; // phone
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // email
-
-        return phoneRegex.test(val) || emailRegex.test(val);
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // standard email
+        const phoneRegex = /^\+[1-9]\d{6,14}$/; // international phone with country code
+        return emailRegex.test(val) || phoneRegex.test(val);
       }, {
-        message: "Identifier must be a valid phone number or email",
+        message: "Identifier must be a valid email or phone number with country code (+)",
       }),
   }),
 });

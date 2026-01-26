@@ -24,6 +24,8 @@ import { SUBSCRIPTION_STATUS, USER_ROLES, USER_STATUS } from '../../../enums/use
 import { OAuth2Client } from 'google-auth-library';
 import { createUniqueReferralId } from '../../../util/generateRefferalId';
 import { generateCustomUserId } from '../user/user.utils';
+import { sendNotification } from '../../../helpers/notificationsHelper';
+import { NotificationType } from '../notification/notification.model';
 
 
 
@@ -33,7 +35,7 @@ import { generateCustomUserId } from '../user/user.utils';
 
 
 //login
-const loginUserFromDB = async (payload: ILoginData) => {
+const  loginUserFromDB = async (payload: ILoginData) => {
   const { identifier, password } = payload;
 
   // 1️⃣ Find user by email or phone
@@ -314,6 +316,47 @@ const verifyOtpToDB = async (payload: { identifier: string, oneTimeCode: number 
     expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
   });
 
+
+  // ✅ 6️⃣ Background referral check (fire-and-forget)
+     // ✅ Background referral check (fire-and-forget)
+(async (verifiedUser) => {
+  try {
+    if (verifiedUser.referredInfo) {
+      const referredId = verifiedUser.referredInfo.referredId;
+      console.log(`[Background] User ${verifiedUser.email} has a referral. ReferredId: ${referredId}`);
+
+      // Find referring user by customUserId
+      const referringUser = await User.findOne({ referenceId: referredId });
+      if (referringUser) {
+        console.log(
+          `[Background] Referring User Info -> Name: ${referringUser.firstName}, Email: ${referringUser.email}, Role: ${referringUser.role}`
+        );
+
+        if (["ADMIN_REP", "ADMIN_SELL"].includes(referringUser.role as string)) {
+          // Send notification to referring user
+          await sendNotification({
+            userIds: [referringUser._id],
+            title: "New customer added under you",
+            body: `Congratulations! A new member ${verifiedUser.firstName || verifiedUser.email} has been added under you.`,
+            type: NotificationType.MANUAL,
+            metadata: { referralId: verifiedUser._id.toString() },
+            channel: { socket: true, push: true },
+          });
+          console.log(`[Background] Notification sent to ${referringUser.email} (Role: ${referringUser.role})`);
+        }
+      } else {
+        console.log(`[Background] Referring user not found for ReferredId: ${referredId}`);
+      }
+    } else {
+      console.log(`[Background] User ${verifiedUser.email} has NO referral.`);
+    }
+  } catch (err) {
+    console.error("[Background] Referral check error:", err);
+  }
+})(user);
+
+
+
   return { message: "OTP verified successfully", accessToken, resetToken };
 };
 
@@ -569,7 +612,47 @@ const deleteOwnUserAccount = async (userId: string, password: string) => {
   const isMatch = await bcrypt.compare(password.trim(), user.password);
   if (!isMatch) throw new ApiError(StatusCodes.UNAUTHORIZED, "Incorrect password");
 
+   // 🔹 Keep user info before delete
+  const deletedUserInfo = {
+    id: user._id,
+    name: user.firstName || "Unknown User",
+    email: user.email,
+  };
+
   await User.findByIdAndDelete(userId);
+
+  
+  // ✅ Background notification (fire & forget)
+  (async () => {
+    try {
+      const admins = await User.find({
+        role: { $in: ["ADMIN", "SUPER_ADMIN"] },
+        status: "active",
+      }).select("_id");
+
+      const adminIds = admins.map((a) => a._id);
+
+      if (adminIds.length) {
+        await sendNotification({
+          userIds: adminIds,
+          title: "User account deleted",
+          body: `User ${deletedUserInfo.name} (${deletedUserInfo.email}) has deleted their account.`,
+          type: NotificationType.MANUAL,
+          metadata: {
+            deletedUserId: deletedUserInfo.id.toString(),
+            email: deletedUserInfo.email,
+          },
+          channel: { socket: true, push: true },
+        });
+      }
+
+      console.log(
+        `[Background] Account deletion notification sent to ${adminIds.length} admin(s)`
+      );
+    } catch (err) {
+      console.error("[Background] Account delete notification error:", err);
+    }
+  })();
   return { deletedUserId: userId };
 };
 // sendPhoneOtpToDB.ts

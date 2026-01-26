@@ -12,7 +12,6 @@ export const sendOtp = async (phone: string, otp: string) => {
   };
 
   const response = await axios.post(url, payload);
-  console.log("VeevoTech response:", response);
-  console.log("VeevoTech response data:", response.data);
+ 
   return response.data;
 };

@@ -17,8 +17,7 @@ export interface IPushPayload {
   sendType: "ALL" | "SPECIFIC";
   title: string;
   body: string;
-
-  location?: string;
+  country?: string;
   tier?: string;
   subscriptionType?: string;
   status?: string;

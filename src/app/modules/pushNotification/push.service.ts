@@ -6,6 +6,9 @@ import { firebaseHelper } from "../../../helpers/firebaseHelper";
 import { User } from "../user/user.model";
 import admin from "../../../config/firebase";
 import { DigitalCard } from "../customer/digitalCard/digitalCard.model";
+import { Types } from "mongoose";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
 
 
 // Send push (existing)
@@ -19,7 +22,7 @@ const sendNotificationToAllUsers = async (
     sendType,
     title,
     body,
-    location,
+    country,
     tier,
     subscriptionType,
     status,
@@ -38,21 +41,37 @@ const sendNotificationToAllUsers = async (
 
     // 2️⃣ Apply SPECIFIC filters
     if (sendType === "SPECIFIC") {
-      console.log("[Notification] Applying SPECIFIC filters");
-      if (location) userFilter.city = location;
-      if (tier) userFilter.tier = tier.toUpperCase();
-      if (subscriptionType) userFilter.subscription = subscriptionType.toUpperCase();
-      if (status) userFilter.status = status.toUpperCase();
-      console.log("[Notification] Updated user filter:", userFilter);
+      if (country) {
+        userFilter.country = { $regex: `^${country}$`, $options: "i" };
+      }
+      if (tier) {
+        userFilter.tier = tier.toUpperCase();
+      }
+      if (subscriptionType) {
+        userFilter.subscription = { $regex: `^${subscriptionType}$`, $options: "i" };
+      }
+      if (status) {
+        userFilter.status = { $regex: `^${status}$`, $options: "i" };
+      }
+
+      console.log("[Notification] Updated SPECIFIC user filter:", userFilter);
     }
 
-    // 3️⃣ Fetch users
-    const users = await User.find(userFilter).select("fcmToken");
-    console.log("[Notification] Users fetched from DB:", users.length);
 
-    const tokens = users
-      .map((u) => u.fcmToken)
-      .filter((t): t is string => !!t);
+    // 3️⃣ Fetch users
+    const users = await User.find(userFilter).select("fcmToken _id");
+    console.log(`[Notification] Users fetched: ${users}`);
+
+    const tokens: string[] = [];
+    console.log("[Notification] Preparing tokens for push");
+    const userIds: Types.ObjectId[] = [];
+    console.log("[Notification] User IDs for notification records");
+    users.forEach((u) => {
+      if (u.fcmToken) {
+        tokens.push(u.fcmToken);  // push token
+        userIds.push(u._id);      // push user _id
+      }
+    });
 
     console.log("[Notification] Tokens found:", tokens);
 
@@ -78,6 +97,16 @@ const sendNotificationToAllUsers = async (
 
     // ✅ Use sendEachForMulticast instead of sendAll
     const response = await admin.messaging().sendEachForMulticast(message);
+
+    await sendNotification({
+      userIds,
+      title,
+      body,
+      type: NotificationType.SYSTEM,
+      metadata: { sentBy: adminId },
+      channel: { socket: false, push: true },
+    });
+    console.log("[Notification] Notification records created");
 
     console.log(
       `[Notification] Push sent. Success: ${response.successCount}, Failed: ${response.failureCount}`
