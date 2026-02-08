@@ -10,7 +10,7 @@ const sellSchema = new Schema({
   discountedBill: { type: Number, required: true },
   pointsEarned: { type: Number, required: true },
   pointRedeemed: { type: Number, required: false },
-  status: { type: String, enum: ["completed", "pending"], default: "pending" },
+  status: { type: String, enum: ["completed", "pending","rejected"], default: "pending" },
 }, { timestamps: true });
 
 

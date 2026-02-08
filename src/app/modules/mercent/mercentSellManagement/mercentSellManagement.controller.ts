@@ -152,7 +152,7 @@ const getPendingRequests = catchAsync(async (req: Request, res: Response) => {
 });
 
 const approvePromotion = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, promotionId } = req.body;
+  const { digitalCardCode, promotionId, sellId } = req.body;
   const user = req.user as IUser;
 
   if (!user._id) {
@@ -163,10 +163,14 @@ const approvePromotion = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
+  // Ensure promotionId is an array
+  const promotionIds = Array.isArray(promotionId) ? promotionId : [promotionId];
+
   const result = await SellService.approvePromotion(
     digitalCardCode,
-    promotionId,
-    user._id.toString()
+    promotionIds,
+    user._id.toString(),
+    sellId // optional
   );
 
   sendResponse(res, {
@@ -177,9 +181,10 @@ const approvePromotion = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
 const approvePromotionreject = catchAsync(
   async (req: Request, res: Response) => {
-    const { digitalCardCode, promotionId } = req.body;
+    const { digitalCardCode, promotionId, sellId } = req.body;
     const user = req.user as IUser;
 
     if (!user._id) {
@@ -190,20 +195,24 @@ const approvePromotionreject = catchAsync(
       });
     }
 
+    const promotionIds = Array.isArray(promotionId) ? promotionId : [promotionId];
+
     const result = await SellService.approvePromotionReject(
       digitalCardCode,
-      promotionId,
-      user._id.toString()
+      promotionIds,
+      user._id.toString(),
+      sellId // optional
     );
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
-      message: "Promotion approved successfully",
+      message: "Promotion rejected successfully",
       data: result,
     });
   }
 );
+
 
 // Controller
 const getPointsHistory = catchAsync(async (req: Request, res: Response) => {

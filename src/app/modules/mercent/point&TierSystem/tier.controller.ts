@@ -163,6 +163,9 @@ const deleteTier = catchAsync(async (req: Request, res: Response) => {
 const getTierByUserId = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
 
+  console.log("🔥 Requested userId:", userId);
+  console.log("🌐 Incoming query params:", req.query);
+
   // Build query with provided userId
   const queryBuilder = new QueryBuilder(
     Tier.find(),
@@ -180,7 +183,10 @@ const getTierByUserId = catchAsync(async (req: Request, res: Response) => {
     .fields();
 
   const tiers = await queryBuilder.modelQuery;
+  console.log("✅ Retrieved tiers:", tiers);
+
   const pagination = await queryBuilder.getPaginationInfo();
+  console.log("📊 Pagination info:", pagination);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

@@ -9,118 +9,148 @@ import { Tier } from "../point&TierSystem/tier.model";
 import { Rating } from "../../customer/rating/rating.model";
 
 // -----------------------------
-// 1. Merchant → Checkout
-// -----------------------------
+
+
+
 // const checkout = async (
 //   merchantId: string,
 //   digitalCardCode: string,
 //   totalBill: number,
-//   promotionId?: string,
+//   promotionIds: string[] = [],
 //   pointRedeemed: number = 0
 // ) => {
-//   const POINT_EARN_RATE = 100; // 100 currency = 1 point
-//   const POINT_REDEEM_RATE = 1; // 1 point = 1 currency
+//   const POINT_EARN_RATE = 10;
+//   const POINT_REDEEM_RATE = 10;
 
-//   // 1️⃣ Find Digital Card
+//   // ===============================
+//   // 🔍 Find Digital Card
+//   // ===============================
 //   const digitalCard = await DigitalCard.findOne({
-//     merchantId: new Types.ObjectId(merchantId),
+//     merchantId,
 //     cardCode: digitalCardCode,
 //   });
 
 //   if (!digitalCard) {
-//     throw new Error("Digital Card not found for this merchant");
+//     throw new Error("Digital Card not found");
 //   }
 
-//   console.log("💠 Digital Card Found:", digitalCard._id.toString());
+//   // ===============================
+// // 🎯 Promotion Validation
+// // ===============================
+// let totalGrossValue = 0;
+// let totalDiscount = 0;
 
-//   let discount = 0;
-//   let selectedPromotion: any = null;
-
-//   // 2️⃣ Handle Promotion
-//   if (promotionId) {
-//     selectedPromotion = await Promotion.findById(promotionId);
-
-//     if (!selectedPromotion) {
-//       throw new Error("Promotion not found");
-//     }
-
-//     const promoIndex = digitalCard.promotions.findIndex(
-//       (p) => p.promotionId?.toString() === promotionId
-//     );
-
-//     if (promoIndex === -1) {
-//       throw new Error("Promotion not added to this DigitalCard");
-//     }
-
-//     const promo = digitalCard.promotions[promoIndex];
-
-//     if (promo.status === "unused") {
-//       promo.status = "used";
-//       promo.usedAt = new Date();
-//       discount = selectedPromotion.discountPercentage || 0;
-//     } else if (promo.status === "pending") {
-//       throw new Error("User approval needed for this promotion");
-//     } else {
-//       throw new Error("Promotion already used or expired");
-//     }
-
-//     await digitalCard.save();
-//   }
-
-//   // 3️⃣ Discounted bill
-//   const discountedBill = parseFloat(
-//     (totalBill - (totalBill * discount) / 100).toFixed(4)
+// for (const promoId of promotionIds) {
+//   const promoInCard = digitalCard.promotions.find(
+//     (p: any) => p.promotionId?.toString() === promoId
 //   );
 
-//   // 4️⃣ Point discount
+//   if (!promoInCard) {
+//     throw new Error(`Promotion ${promoId} not found in digital card`);
+//   }
+
+//   // ✅ FIXED STATUS CHECK
+//   if (promoInCard.status === "used") {
+//     throw new Error(`Promotion ${promoId} already used`);
+//   }
+
+//   const promotion = await Promotion.findById(promoId);
+//   if (!promotion) {
+//     throw new Error(`Promotion ${promoId} not found`);
+//   }
+
+//   const grossValue = promotion.grossValue || 0;
+//   const discountPercentage = promotion.discountPercentage || 0;
+//   const discountAmount = (grossValue * discountPercentage) / 100;
+
+//   totalGrossValue += grossValue;
+//   totalDiscount += discountAmount;
+
+//   // ✅ ONLY HERE promotion is marked as used
+//   promoInCard.status = "used";
+//   promoInCard.usedAt = new Date();
+// }
+
+// await digitalCard.save();
+
+//   // ===============================
+//   // 💰 Bill Calculation
+//   // ===============================
+//   const discountedBill = parseFloat(
+//     (totalBill - totalDiscount).toFixed(4)
+//   );
+
 //   const pointDiscount = parseFloat(
 //     (pointRedeemed * POINT_REDEEM_RATE).toFixed(4)
 //   );
 
-//   // 5️⃣ Final bill
 //   const finalBill = parseFloat(
 //     (discountedBill - pointDiscount).toFixed(4)
 //   );
 
-//   // 6️⃣ Earn points (based on discounted bill)
-//   const pointsEarned = parseFloat(
-//     (discountedBill / POINT_EARN_RATE).toFixed(4)
+//   if(finalBill < 0) {
+//     throw new Error("Final bill cannot be negative");
+//   }
+
+//   // ===============================
+//   // ⭐ Tier & Earn Point Calculation
+//   // ===============================
+//   const netBillForPoint = Math.max(
+//     totalBill - totalGrossValue,
+//     0
 //   );
 
-//   // 7️⃣ Validation: enough points to redeem
-//   if (pointRedeemed > (digitalCard.availablePoints || 0)) {
+//   const userTier = await Tier.findOne({
+//     admin: merchantId,
+//     isActive: true,
+//     pointsThreshold: { $lte: digitalCard.lifeTimeEarnPoints || 0 },
+//   }).sort({ pointsThreshold: -1 });
+
+//   const accumulationPercentage =
+//     userTier?.accumulationRule || 0;
+
+//   const eligibleAmount =
+//     (netBillForPoint * accumulationPercentage) / 100;
+
+//   const pointsEarned = parseFloat(
+//     (eligibleAmount / POINT_EARN_RATE).toFixed(4)
+//   );
+
+//   // ===============================
+//   // 🔄 Update Digital Card
+//   // ===============================
+//   if (pointRedeemed > digitalCard.availablePoints) {
 //     throw new Error("Not enough available points");
 //   }
 
-//   // 8️⃣ Update points
 //   digitalCard.availablePoints = parseFloat(
 //     (
-//       (digitalCard.availablePoints || 0) +
+//       digitalCard.availablePoints +
 //       pointsEarned -
 //       pointRedeemed
 //     ).toFixed(4)
 //   );
 
-//   // 🔥 Lifetime points ONLY increase
 //   digitalCard.lifeTimeEarnPoints = parseFloat(
 //     (
-//       (digitalCard.lifeTimeEarnPoints || 0) +
+//       digitalCard.lifeTimeEarnPoints +
 //       pointsEarned
 //     ).toFixed(4)
 //   );
 
 //   await digitalCard.save();
 
-//   console.log("💠 Available Points:", digitalCard.availablePoints);
-//   console.log("💠 Lifetime Earned Points:", digitalCard.lifeTimeEarnPoints);
-
-//   // 9️⃣ Save transaction
+//   // ===============================
+//   // 🧾 Save Transaction
+//   // ===============================
 //   const sell = await Sell.create({
 //     merchantId,
 //     userId: digitalCard.userId,
 //     digitalCardId: digitalCard._id,
-//     promotionId: selectedPromotion?._id || null,
+//     promotionIds,
 //     totalBill,
+//     totalGrossValue,
+//     totalDiscount,
 //     discountedBill,
 //     pointRedeemed,
 //     pointDiscount,
@@ -129,28 +159,29 @@ import { Rating } from "../../customer/rating/rating.model";
 //     status: "completed",
 //   });
 
+//   // ===============================
 //   // 🔔 Notifications
-//   if (pointRedeemed > 0) {
+//   // ===============================
+//   if (pointsEarned > 0) {
 //     await sendNotification({
-//       userIds: [merchantId],
-//       title: "Point Redeemed",
-//       body: `${pointRedeemed} points redeemed successfully`,
+//       userIds: [digitalCard.userId.toString()],
+//       title: "Points Earned",
+//       body: `You earned ${pointsEarned} points`,
 //       type: NotificationType.POINTS,
 //     });
 //   }
 
-//   if (pointsEarned > 0) {
+//   if (pointRedeemed > 0) {
 //     await sendNotification({
-//       userIds: [digitalCard.userId],
-//       title: "Point Earned",
-//       body: `${pointsEarned} points earned successfully`,
+//       userIds: [digitalCard.userId.toString()],
+//       title: "Points Redeemed",
+//       body: `You redeemed ${pointRedeemed} points`,
 //       type: NotificationType.POINTS,
 //     });
 //   }
 
 //   return sell;
 // };
-
 
 
 const checkout = async (
@@ -160,8 +191,13 @@ const checkout = async (
   promotionIds: string[] = [],
   pointRedeemed: number = 0
 ) => {
-  const POINT_EARN_RATE = 10;
-  const POINT_REDEEM_RATE = 10;
+  console.log("=================================================");
+  console.log("🚀 checkout START");
+  console.log("🔹 Input:", { merchantId, digitalCardCode, totalBill, promotionIds, pointRedeemed });
+  console.log("=================================================");
+
+  const POINT_REDEEM_RATE = 10; // 1 point = 10 taka
+  const POINT_EARN_RATE = 10;   // 10 taka = 1 point
 
   // ===============================
   // 🔍 Find Digital Card
@@ -171,75 +207,75 @@ const checkout = async (
     cardCode: digitalCardCode,
   });
 
-  if (!digitalCard) {
-    throw new Error("Digital Card not found");
+  if (!digitalCard) throw new Error("Digital Card not found");
+
+  console.log("✅ DigitalCard found:", digitalCardCode, "UserID:", digitalCard.userId.toString());
+
+  // ===============================
+  // 🔍 Validate Redeem Points
+  // ===============================
+  if (pointRedeemed > digitalCard.availablePoints) {
+    throw new Error("Not enough available points");
   }
 
   // ===============================
-// 🎯 Promotion Validation
-// ===============================
-let totalGrossValue = 0;
-let totalDiscount = 0;
+  // 🔖 Apply Promotions (if any)
+  // ===============================
+  let totalDiscount = 0;
+  let totalGrossValue = 0;
 
-for (const promoId of promotionIds) {
-  const promoInCard = digitalCard.promotions.find(
-    (p: any) => p.promotionId?.toString() === promoId
-  );
+  for (const promoId of promotionIds) {
+    const promoInCard = digitalCard.promotions.find(
+      p => p.promotionId?.toString() === promoId
+    );
 
-  if (!promoInCard) {
-    throw new Error(`Promotion ${promoId} not found in digital card`);
+    if (!promoInCard) {
+      throw new Error(`Promotion ${promoId} not found in card`);
+    }
+
+    if (!["pending", "unused"].includes(promoInCard.status)) {
+      throw new Error(`Promotion ${promoId} already used`);
+    }
+
+    const promotion = await Promotion.findById(promoId);
+    if (!promotion) {
+      throw new Error(`Promotion ${promoId} not found in DB`);
+    }
+
+    const grossValue = promotion.grossValue || 0;
+    const discountPercentage = promotion.discountPercentage || 0;
+    const discountAmount = (grossValue * discountPercentage) / 100;
+
+    totalGrossValue += grossValue;   
+    totalDiscount += discountAmount;
+
+    console.log(`🔹 Promotion applied: ${promoId}`, {
+      grossValue,
+      discountPercentage,
+      discountAmount,
+    });
   }
-
-  // ✅ FIXED STATUS CHECK
-  if (promoInCard.status === "used") {
-    throw new Error(`Promotion ${promoId} already used`);
-  }
-
-  const promotion = await Promotion.findById(promoId);
-  if (!promotion) {
-    throw new Error(`Promotion ${promoId} not found`);
-  }
-
-  const grossValue = promotion.grossValue || 0;
-  const discountPercentage = promotion.discountPercentage || 0;
-  const discountAmount = (grossValue * discountPercentage) / 100;
-
-  totalGrossValue += grossValue;
-  totalDiscount += discountAmount;
-
-  // ✅ ONLY HERE promotion is marked as used
-  promoInCard.status = "used";
-  promoInCard.usedAt = new Date();
-}
-
-await digitalCard.save();
 
   // ===============================
   // 💰 Bill Calculation
   // ===============================
-  const discountedBill = parseFloat(
-    (totalBill - totalDiscount).toFixed(4)
-  );
+  const discountedBill = parseFloat((totalBill - totalDiscount).toFixed(4));
+  const pointDiscount = parseFloat((pointRedeemed * POINT_REDEEM_RATE).toFixed(4));
+  const finalBill = parseFloat((discountedBill - pointDiscount).toFixed(4));
 
-  const pointDiscount = parseFloat(
-    (pointRedeemed * POINT_REDEEM_RATE).toFixed(4)
-  );
-
-  const finalBill = parseFloat(
-    (discountedBill - pointDiscount).toFixed(4)
-  );
-
-  if(finalBill < 0) {
+  if (finalBill < 0) {
     throw new Error("Final bill cannot be negative");
   }
 
+  console.log("🔹 Total Discount:", totalDiscount);
+  console.log("🔹 Discounted Bill:", discountedBill);
+  console.log("🔹 Point Discount:", pointDiscount);
+  console.log("🔹 Final Bill:", finalBill);
+
   // ===============================
-  // ⭐ Tier & Earn Point Calculation
+  // ⭐ Points Earn Calculation (requestApproval style)
   // ===============================
-  const netBillForPoint = Math.max(
-    totalBill - totalGrossValue,
-    0
-  );
+  const netBillForPoint = Math.max(totalBill - totalGrossValue, 0);
 
   const userTier = await Tier.findOne({
     admin: merchantId,
@@ -247,82 +283,116 @@ await digitalCard.save();
     pointsThreshold: { $lte: digitalCard.lifeTimeEarnPoints || 0 },
   }).sort({ pointsThreshold: -1 });
 
-  const accumulationPercentage =
-    userTier?.accumulationRule || 0;
+  const accumulationPercentage = userTier?.accumulationRule || 0;
 
-  const eligibleAmount =
-    (netBillForPoint * accumulationPercentage) / 100;
+  const eligibleAmount = (netBillForPoint * accumulationPercentage) / 100;
 
-  const pointsEarned = parseFloat(
-    (eligibleAmount / POINT_EARN_RATE).toFixed(4)
-  );
+  const pointsEarned = parseFloat((eligibleAmount / POINT_EARN_RATE).toFixed(4));
 
-  // ===============================
-  // 🔄 Update Digital Card
-  // ===============================
-  if (pointRedeemed > digitalCard.availablePoints) {
-    throw new Error("Not enough available points");
-  }
-
-  digitalCard.availablePoints = parseFloat(
-    (
-      digitalCard.availablePoints +
-      pointsEarned -
-      pointRedeemed
-    ).toFixed(4)
-  );
-
-  digitalCard.lifeTimeEarnPoints = parseFloat(
-    (
-      digitalCard.lifeTimeEarnPoints +
-      pointsEarned
-    ).toFixed(4)
-  );
-
-  await digitalCard.save();
+  console.log("🔹 Tier:", userTier?.name || "N/A");
+  console.log("🔹 Accumulation %:", accumulationPercentage);
+  console.log("🔹 Net Bill For Point:", netBillForPoint);
+  console.log("🔹 Eligible Amount:", eligibleAmount);
+  console.log("🔹 Points Earned:", pointsEarned);
 
   // ===============================
-  // 🧾 Save Transaction
+  // 🔹 Approval condition
+  // ===============================
+  const needApproval = pointRedeemed > 0; // only pointRedeemed triggers approval
+
+  // ===============================
+  // 🧾 Create Sell Record
   // ===============================
   const sell = await Sell.create({
     merchantId,
     userId: digitalCard.userId,
     digitalCardId: digitalCard._id,
-    promotionIds,
+    digitalCardCode,
+    promotionId: promotionIds.length ? promotionIds : undefined, // optional
+
     totalBill,
     totalGrossValue,
     totalDiscount,
+
     discountedBill,
     pointRedeemed,
     pointDiscount,
     finalBill,
-    pointsEarned,
-    status: "completed",
+
+    netBillForPoint,
+    accumulationPercentage,
+    eligibleAmount,
+    pointsEarned, 
+
+    status: needApproval ? "pending" : "completed",
   });
 
+  console.log("✅ Sell created:", sell._id.toString(), "Status:", sell.status);
+
   // ===============================
-  // 🔔 Notifications
+  // 🔔 Update Digital Card Points
   // ===============================
-  if (pointsEarned > 0) {
-    await sendNotification({
-      userIds: [digitalCard.userId.toString()],
-      title: "Points Earned",
-      body: `You earned ${pointsEarned} points`,
-      type: NotificationType.POINTS,
-    });
+  // ===============================
+// 🔔 Update Digital Card Points (ONLY if no approval needed)
+// ===============================
+if (!needApproval) {
+  digitalCard.availablePoints = digitalCard.availablePoints - pointRedeemed + pointsEarned;
+  digitalCard.lifeTimeEarnPoints = (digitalCard.lifeTimeEarnPoints || 0) + pointsEarned;
+
+  for (const promoId of promotionIds) {
+    const promoInCard = digitalCard.promotions.find(
+      p => p.promotionId?.toString() === promoId
+    );
+    if (promoInCard) {
+      promoInCard.status = "used";
+      promoInCard.usedAt = new Date();
+    }
   }
 
-  if (pointRedeemed > 0) {
-    await sendNotification({
-      userIds: [digitalCard.userId.toString()],
-      title: "Points Redeemed",
-      body: `You redeemed ${pointRedeemed} points`,
-      type: NotificationType.POINTS,
-    });
+  await digitalCard.save();
+
+  console.log("🔹 DigitalCard updated. Available Points:", digitalCard.availablePoints);
+} else {
+  console.log("🔹 Approval pending, DigitalCard points not updated yet.");
+}
+
+
+  // ===============================
+  // 🔔 Socket Approval (if needed)
+  // ===============================
+  if (needApproval) {
+    const io = (global as any).io;
+    if (io) {
+      io.emit(`getApplyRequest::${digitalCard.userId}`, {
+        sellId: sell._id,
+        merchantId,
+        digitalCardCode,
+        totalBill,
+        discountedBill,
+        finalBill,
+        pointRedeemed,
+        promotionIds,
+        pointsEarned,
+        message: "Merchant requested checkout approval",
+      });
+
+      console.log("💠 Approval request sent to user:", digitalCard.userId.toString());
+    }
   }
+
+  console.log("=================================================");
+  console.log("🚀 checkout END");
+  console.log("=================================================");
 
   return sell;
 };
+
+
+
+
+
+
+
 
 
 // -----------------------------
@@ -693,73 +763,240 @@ const getPendingRequests = async (userId: string) => {
 // -----------------------------
 // 3. User → Approve Promotion
 // -----------------------------
+// const approvePromotion = async (
+//   digitalCardCode: string,
+//   promotionId: string,
+//   userId: string
+// ) => {
+//   const digitalCard = await DigitalCard.findOne({
+//     cardCode: digitalCardCode,
+//     userId: new Types.ObjectId(userId),
+//   });
+
+//   if (!digitalCard) {
+//     throw new Error("Digital card not found for user");
+//   }
+
+//   const promo = digitalCard.promotions.find(
+//     (p) => p.promotionId?.toString() === promotionId
+//   );
+
+//   if (!promo) {
+//     throw new Error("Promotion not found in card");
+//   }
+
+//   if (promo.status !== "pending") {
+//     throw new Error("Promotion already approved or used");
+//   }
+
+//   // Approval done
+//   promo.status = "unused";
+
+//   await digitalCard.save();
+
+//   return { status: "approved" };
+// };
+
+
 const approvePromotion = async (
   digitalCardCode: string,
-  promotionId: string,
-  userId: string
+  promotionIds: string[],
+  userId: string,
+  sellId?: string
 ) => {
+  console.log("=================================================");
+  console.log("🚀 approvePromotion START");
+  console.log("=================================================");
+
+  // -------------------------------
+  // 🔍 Find Digital Card
+  // -------------------------------
   const digitalCard = await DigitalCard.findOne({
     cardCode: digitalCardCode,
     userId: new Types.ObjectId(userId),
   });
 
-  if (!digitalCard) {
-    throw new Error("Digital card not found for user");
+  if (!digitalCard) throw new Error("Digital card not found");
+
+  console.log("✅ DigitalCard found:", digitalCardCode, "UserID:", digitalCard.userId.toString());
+
+  // -------------------------------
+  // 🔍 Find pending sell
+  // -------------------------------
+  const sell = await Sell.findOne({
+    _id: sellId, // <-- use exact sell
+    digitalCardId: digitalCard._id,
+    status: "pending",
+});
+
+
+  if (!sell) throw new Error("Pending checkout not found");
+
+  console.log("📌 Pending Sell found:", sell._id.toString());
+  console.log("🔹 Sell Total Bill:", sell.totalBill);
+  console.log("🔹 Sell Points Redeemed:", sell.pointRedeemed);
+  console.log("🔹 Sell Points Earned:", sell.pointsEarned);
+
+  // Prevent double approval
+  if (sell.status === "completed") {
+    console.log("⚠️ Sell already completed. Skipping points update.");
+    return {
+      sellId: sell._id,
+      approvedPromotions: [],
+      pointsEarned: sell.pointsEarned,
+      pointsRedeemed: sell.pointRedeemed,
+    };
   }
 
-  const promo = digitalCard.promotions.find(
-    (p) => p.promotionId?.toString() === promotionId
+  // -------------------------------
+  // 🔖 Mark promotions as USED
+  // -------------------------------
+  const approvedPromotions: string[] = [];
+  for (const promotionId of promotionIds) {
+    const promo = digitalCard.promotions.find(
+      p => p.promotionId?.toString() === promotionId
+    );
+
+    if (!promo || promo.status !== "pending") continue;
+
+    promo.status = "used";
+    promo.usedAt = new Date();
+    approvedPromotions.push(promotionId);
+  }
+
+  // -------------------------------
+  // 💰 Finalize Points (Fraction safe)
+  // -------------------------------
+  const redeemed = parseFloat((sell.pointRedeemed || 0).toFixed(4));
+  const earned = parseFloat((sell.pointsEarned || 0).toFixed(4));
+
+  digitalCard.availablePoints = parseFloat(
+    ((digitalCard.availablePoints || 0) - redeemed + earned).toFixed(4)
   );
 
-  if (!promo) {
-    throw new Error("Promotion not found in card");
-  }
+  digitalCard.lifeTimeEarnPoints = parseFloat(
+    ((digitalCard.lifeTimeEarnPoints || 0) + earned).toFixed(4)
+  );
 
-  if (promo.status !== "pending") {
-    throw new Error("Promotion already approved or used");
-  }
-
-  // Approval done
-  promo.status = "unused";
+  if (digitalCard.lifeTimeEarnPoints < 0) digitalCard.lifeTimeEarnPoints = 0;
 
   await digitalCard.save();
 
-  return { status: "approved" };
+  console.log("🔹 DigitalCard updated:");
+  console.log("   Available Points:", digitalCard.availablePoints);
+  console.log("   LifeTime Earned Points:", digitalCard.lifeTimeEarnPoints);
+
+  // -------------------------------
+  // ✅ Finalize Sell
+  // -------------------------------
+  sell.status = "completed";
+  await sell.save();
+
+  console.log("✅ Sell approved & completed:", sell._id.toString());
+  console.log("🔹 Points Redeemed:", redeemed);
+  console.log("🔹 Points Earned:", earned);
+  console.log("🔹 Promotions Approved:", approvedPromotions);
+
+  console.log("=================================================");
+  console.log("🚀 approvePromotion END");
+  console.log("=================================================");
+
+  return {
+    sellId: sell._id,
+    approvedPromotions,
+    pointsEarned: earned,
+    pointsRedeemed: redeemed,
+  };
 };
+
+
 
 const approvePromotionReject = async (
   digitalCardCode: string,
-  promotionId: string,
-  userId: string
+  promotionIds: string[],
+  userId: string,
+  sellId?: string
 ) => {
+  console.log("=================================================");
+  console.log("🚀 approvePromotionReject START");
+  console.log("=================================================");
+
+  // -------------------------------
+  // 🔍 Find Digital Card
+  // -------------------------------
   const digitalCard = await DigitalCard.findOne({
     cardCode: digitalCardCode,
     userId: new Types.ObjectId(userId),
   });
 
-  if (!digitalCard) {
-    throw new Error("Digital card not found for user");
+  if (!digitalCard) throw new Error("Digital card not found");
+
+  console.log("✅ DigitalCard found:", digitalCardCode, "UserID:", digitalCard.userId.toString());
+
+  // -------------------------------
+  // 🔍 Find pending sell
+  // -------------------------------
+  const sellQuery: any = {
+    digitalCardId: digitalCard._id,
+    status: "pending",
+  };
+  if (sellId) sellQuery._id = sellId;
+
+  const sell = await Sell.findOne(sellQuery);
+
+  if (!sell) throw new Error("Pending checkout not found");
+
+  console.log("📌 Pending Sell found:", sell._id.toString());
+  console.log("🔹 Sell Total Bill:", sell.totalBill);
+  console.log("🔹 Sell Points Redeemed:", sell.pointRedeemed);
+  console.log("🔹 Sell Points Earned:", sell.pointsEarned);
+
+  // Prevent double rejection
+  if (sell.status === "rejected") {
+    console.log("⚠️ Sell already rejected. Skipping rollback.");
+    return {
+      sellId: sell._id,
+      rejectedPromotions: [],
+    };
   }
 
-  const promo = digitalCard.promotions.find(
-    (p) => p.promotionId?.toString() === promotionId
-  );
+  // -------------------------------
+  // 🔖 Rollback promotions
+  // -------------------------------
+  const rejectedPromotions: string[] = [];
+  for (const promotionId of promotionIds) {
+    const promo = digitalCard.promotions.find(
+      p => p.promotionId?.toString() === promotionId
+    );
+    if (!promo) continue;
 
-  if (!promo) {
-    throw new Error("Promotion not found in card");
+    promo.status = "pending";
+    promo.usedAt = null;
+    rejectedPromotions.push(promotionId);
   }
 
-  if (promo.status !== "pending") {
-    throw new Error("Promotion already approved or used");
-  }
+  // -------------------------------
+  // ❌ Reject sell WITHOUT points change
+  // -------------------------------
+  sell.status = "rejected";
+  await sell.save();
 
-  // Approval done
-  promo.status = "pending";
+  console.log("🔴 Sell rejected (points untouched):", sell._id.toString());
 
-  await digitalCard.save();
+  console.log("=================================================");
+  console.log("🚀 approvePromotionReject END");
+  console.log("=================================================");
 
-  return { status: "reject" };
+  return {
+    rejectedPromotions,
+    sellId: sell._id,
+  };
 };
+
+
+
+
+
 
 // Service
 const getPointsHistory = async (
