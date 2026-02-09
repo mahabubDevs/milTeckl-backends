@@ -443,35 +443,89 @@ const getCustomerChart = async (merchantId: string, year?: number) => {
 
 
 const getCustomerChartWeek = async (merchantId: string, startDate: string, endDate: string) => {
+  console.log("====================================");
+  console.log("🚀 getCustomerChartWeek START");
+  console.log("merchantId:", merchantId);
+  console.log("startDate:", startDate);
+  console.log("endDate:", endDate);
+
+  // Frontend থেকে আসা date 그대로 ব্যবহার
   const from = new Date(`${startDate}T00:00:00Z`);
   const to = new Date(`${endDate}T23:59:59Z`);
 
+  console.log("📅 Date Range:");
+  console.log("FROM:", from.toISOString());
+  console.log("TO  :", to.toISOString());
+
   const pipeline = [
-    { $match: { merchantId: new Types.ObjectId(merchantId), createdAt: { $gte: from, $lte: to } } },
-    { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" }, day: { $dayOfMonth: "$createdAt" } }, totalRevenue: { $sum: "$discountedBill" } } },
-    { $sort: { "_id.year": 1 as const, "_id.month": 1 as const, "_id.day": 1 as const } }
+    { 
+      $match: { 
+        merchantId: new Types.ObjectId(merchantId), 
+        createdAt: { $gte: from, $lte: to } 
+      } 
+    },
+    { 
+      $group: { 
+        _id: { 
+          year: { $year: "$createdAt" }, 
+          month: { $month: "$createdAt" }, 
+          day: { $dayOfMonth: "$createdAt" } 
+        }, 
+        totalRevenue: { $sum: "$discountedBill" } 
+      } 
+    },
+    { 
+      $sort: { 
+        "_id.year": 1 as const, 
+        "_id.month": 1 as const, 
+        "_id.day": 1 as const 
+      } 
+    }
   ] as any;
+
+  console.log("🧩 Aggregation Pipeline:");
+  console.dir(pipeline, { depth: null });
 
   const data = await Sell.aggregate(pipeline);
 
+  console.log("📦 Aggregation Result Raw:");
+  console.log(data);
+
+  if (!data.length) {
+    console.log("⚠️ No data found from aggregation");
+  }
+
   const days: { date: string; revenue: number }[] = [];
   const current = new Date(from);
+
+  console.log("🔁 Generating daily chart data...");
 
   while (current <= to) {
     const y = current.getUTCFullYear();
     const m = current.getUTCMonth() + 1;
     const d = current.getUTCDate();
 
+    console.log(`🔍 Checking date: ${y}-${m}-${d}`);
+
     const found = data.find(item => item._id.year === y && item._id.month === m && item._id.day === d);
 
-    days.push({ date: current.toISOString().slice(0, 10), revenue: found?.totalRevenue || 0 });
+    console.log("➡️ Found:", found || "❌ No record");
+
+    days.push({ 
+      date: current.toISOString().slice(0, 10), 
+      revenue: found?.totalRevenue || 0 
+    });
 
     current.setUTCDate(current.getUTCDate() + 1);
-
   }
+
+  console.log("✅ Final Chart Data:");
+  console.log(days);
+  console.log("====================================");
 
   return days;
 };
+
 
 
 export const DashboardMercentService = {

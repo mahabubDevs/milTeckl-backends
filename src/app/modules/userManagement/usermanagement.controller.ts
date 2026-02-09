@@ -32,7 +32,8 @@ const createUser = catchAsync(async (req: any, res: any) => {
 
 
 const createMerchant = catchAsync(async (req: any, res: any) => {
-  const result = await UserService.createMerchantToDB(req.body);
+  const creator = req.user; // logged-in user creating the merchant
+  const result = await UserService.createMerchantToDB(req.body, creator);
 
   // Audit log
   await AuditService.createLog(

@@ -61,10 +61,13 @@ const createUserToDB = async (payload: IUser, creator?: any) => {
 };
 
 
+enum APPROVE_STATUS {
+  APPROVED = "approved",
+  PENDING = "pending",
+}
 
 
-
-const createMerchantToDB = async (payload: any) => {
+const createMerchantToDB = async (payload: any, creatorUser: any) => {
   // required check
   if (!payload.email) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Email is required");
@@ -87,11 +90,9 @@ const createMerchantToDB = async (payload: any) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Phone already exists");
   }
 
-
   const referenceId = await createUniqueReferralId();
   const customerId = await generateCustomUserId(USER_ROLES.MERCENT);
 
-  // 🔥 merchant data (any use, model change না করে)
   const merchantData: any = {
     ...payload,
 
@@ -101,9 +102,9 @@ const createMerchantToDB = async (payload: any) => {
     verified: true,
 
     customUserId: customerId,
-    referenceId: referenceId,
+    referenceId,
 
-    // merchant specific (extra field — TS safe)
+    // merchant specific
     businessName: payload.businessName,
     subscription: payload.subscriptionType,
     lastPaymentDate: payload.lastPaymentDate,
@@ -113,9 +114,15 @@ const createMerchantToDB = async (payload: any) => {
     city: payload.city,
   };
 
+  // ✅ ONLY super_admin auto approve
+  if (creatorUser.role === USER_ROLES.SUPER_ADMIN) {
+    merchantData.approveStatus = APPROVE_STATUS.APPROVED;
+  }
+
   const result = await User.create(merchantData);
   return result;
 };
+
 
 // get all users
 // Service

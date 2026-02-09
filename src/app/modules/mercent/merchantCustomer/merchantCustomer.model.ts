@@ -22,6 +22,17 @@ const merchantCustomerSchema = new Schema(
         lastPurchaseAt: { type: Date },
 
         points: { type: Number, default: 0 },
+        segment: {
+        type: String,
+        enum: [
+            "new_customer",
+            "returning_customer",
+            "loyal_customer",
+            "vip_customer",
+            "all_customer",
+        ],
+        default: "all_customer",
+        }
     },
     { timestamps: true }
 );

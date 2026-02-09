@@ -13,6 +13,7 @@ import { sendNotification } from "../../../../helpers/notificationsHelper";
 import { resolveCustomerIdsBySegment } from "../../../../util/customerSegmentation";
 import { NotificationType } from "../../notification/notification.model";
 import { CUSTOMER_SEGMENT } from "../../../../enums/user";
+import { MerchantCustomer } from "../merchantCustomer/merchantCustomer.model";
 
 const generatePromotionCode = (length = 6) => {
   const chars = "0123456789";
@@ -126,7 +127,10 @@ const getUserSegment = async (userId: string) => {
   return segment; // ✅ শুধু string
 };
 
-
+const getUserSegmentUpdate = async (userId: string, merchantId: string) => {
+  const customer = await MerchantCustomer.findOne({ userId, merchantId }).select("segment");
+  return customer?.segment || "new_customer"; // default
+};
 
 const getSinglePromotionFromDB = async (
   id: string
@@ -498,6 +502,7 @@ export const PromotionService = {
   getUserSegment,
   getAllPromotionsOfAMerchant,
   sendNotificationToCustomer,
+  getUserSegmentUpdate,
 };
 
 

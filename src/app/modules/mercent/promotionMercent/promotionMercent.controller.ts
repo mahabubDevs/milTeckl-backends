@@ -13,6 +13,7 @@ import { sendNotification } from "../../../../helpers/notificationsHelper";
 import { NotificationType } from "../../notification/notification.model";
 import { DigitalCard } from "../../customer/digitalCard/digitalCard.model";
 import { Rating } from "../../customer/rating/rating.model";
+import { MerchantCustomer } from "../merchantCustomer/merchantCustomer.model";
 
 const createPromotion = catchAsync(async (req: Request, res: Response) => {
   // body data parse
@@ -115,98 +116,98 @@ const getAllPromotionsOfAMerchant = catchAsync(
   }
 );
 
-const getPromotionsForUser = catchAsync(async (req: Request, res: Response) => {
-  const userId = (req.user as any)?._id;
-  if (!userId) {
-    throw new ApiError(StatusCodes.UNAUTHORIZED, "User ID not found");
-  }
+// const getPromotionsForUser = catchAsync(async (req: Request, res: Response) => {
+//   const userId = (req.user as any)?._id;
+//   if (!userId) {
+//     throw new ApiError(StatusCodes.UNAUTHORIZED, "User ID not found");
+//   }
 
-  // 1️⃣ User segment
-  const userSegment = await PromotionService.getUserSegment(userId);
+//   // 1️⃣ User segment
+//   const userSegment = await PromotionService.getUserSegment(userId);
 
-  // 2️⃣ Today
-  const today = new Date();
-  const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-  const todayDay = dayMap[today.getDay()];
+//   // 2️⃣ Today
+//   const today = new Date();
+//   const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+//   const todayDay = dayMap[today.getDay()];
 
-  // 3️⃣ Promotions
-  let promotions = await Promotion.find({
-    customerSegment: { $in: [userSegment, "all_customer"] },
-    status: "active",
-  })
-    .populate("merchantId", "website name")
-    .lean();
+//   // 3️⃣ Promotions
+//   let promotions = await Promotion.find({
+//     customerSegment: { $in: [userSegment, "all_customer"] },
+//     status: "active",
+//   })
+//     .populate("merchantId", "website name")
+//     .lean();
 
-  // 4️⃣ User digital cards
-  const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+//   // 4️⃣ User digital cards
+//   const digitalCards = await DigitalCard.find({ userId }).select("promotions");
 
-  const existingPromotionIds = digitalCards.flatMap(card =>
-    card.promotions
-      .map(p => p.promotionId?.toString())
-      .filter(Boolean) as string[]
-  );
+//   const existingPromotionIds = digitalCards.flatMap(card =>
+//     card.promotions
+//       .map(p => p.promotionId?.toString())
+//       .filter(Boolean) as string[]
+//   );
 
-  // 5️⃣ Date + day + card filter
-  promotions = promotions.filter(promo => {
-    const startDate = new Date(promo.startDate);
-    const endDate = new Date(promo.endDate);
+//   // 5️⃣ Date + day + card filter
+//   promotions = promotions.filter(promo => {
+//     const startDate = new Date(promo.startDate);
+//     const endDate = new Date(promo.endDate);
 
-    const isValidDate = today >= startDate && today <= endDate;
-    const days = promo.availableDays || [];
-    const isValidDay = days.includes("all") || days.includes(todayDay);
-    const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
+//     const isValidDate = today >= startDate && today <= endDate;
+//     const days = promo.availableDays || [];
+//     const isValidDay = days.includes("all") || days.includes(todayDay);
+//     const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
 
-    return isValidDate && isValidDay && isNotInUserCard;
-  });
+//     return isValidDate && isValidDay && isNotInUserCard;
+//   });
 
-  // 🔥 6️⃣ Get average rating per promotion
-  const promotionIds = promotions.map(p => p._id);
+//   // 🔥 6️⃣ Get average rating per promotion
+//   const promotionIds = promotions.map(p => p._id);
 
-  const ratingsAgg = await Rating.aggregate([
-    {
-      $match: {
-        promotionId: { $in: promotionIds },
-      },
-    },
-    {
-      $group: {
-        _id: "$promotionId",
-        averageRating: { $avg: "$rating" },
-        totalRatings: { $sum: 1 },
-      },
-    },
-  ]);
+//   const ratingsAgg = await Rating.aggregate([
+//     {
+//       $match: {
+//         promotionId: { $in: promotionIds },
+//       },
+//     },
+//     {
+//       $group: {
+//         _id: "$promotionId",
+//         averageRating: { $avg: "$rating" },
+//         totalRatings: { $sum: 1 },
+//       },
+//     },
+//   ]);
 
-  // 🔹 Convert to map for fast lookup
-  const ratingMap = new Map(
-    ratingsAgg.map(r => [
-      r._id.toString(),
-      {
-        averageRating: Number(r.averageRating.toFixed(1)),
-        totalRatings: r.totalRatings,
-      },
-    ])
-  );
+//   // 🔹 Convert to map for fast lookup
+//   const ratingMap = new Map(
+//     ratingsAgg.map(r => [
+//       r._id.toString(),
+//       {
+//         averageRating: Number(r.averageRating.toFixed(1)),
+//         totalRatings: r.totalRatings,
+//       },
+//     ])
+//   );
 
-  // 7️⃣ Attach rating to promotion
-  promotions = promotions.map(promo => {
-    const ratingData = ratingMap.get(promo._id.toString());
+//   // 7️⃣ Attach rating to promotion
+//   promotions = promotions.map(promo => {
+//     const ratingData = ratingMap.get(promo._id.toString());
 
-    return {
-      ...promo,
-      averageRating: ratingData?.averageRating || 0,
-      totalRatings: ratingData?.totalRatings || 0,
-    };
-  });
+//     return {
+//       ...promo,
+//       averageRating: ratingData?.averageRating || 0,
+//       totalRatings: ratingData?.totalRatings || 0,
+//     };
+//   });
 
-  // 8️⃣ Response
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Promotions retrieved successfully for user",
-    data: promotions,
-  });
-});
+//   // 8️⃣ Response
+//   sendResponse(res, {
+//     statusCode: StatusCodes.OK,
+//     success: true,
+//     message: "Promotions retrieved successfully for user",
+//     data: promotions,
+//   });
+// });
 
 
 
@@ -378,74 +379,207 @@ const sendNotificationToCustomer = catchAsync(async (req: Request, res: Response
 });
 
 
+// const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Response) => {
+//   const userId = (req.user as any)?._id;
+//   if (!userId) throw new ApiError(StatusCodes.UNAUTHORIZED, "User ID not found");
+
+//   // 1️⃣ Get user segment
+//   const userSegment = await PromotionService.getUserSegment(userId);
+
+//   // 2️⃣ Today and day mapping
+//   const today = new Date();
+//   const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+//   const todayDay = dayMap[today.getDay()];
+
+//   // 3️⃣ Fetch Merchant Promotions
+//   let merchantPromotions = await Promotion.find({
+//     customerSegment: { $in: [userSegment, "all_customer"] },
+//     status: "active",
+//   }).lean();
+//   merchantPromotions = merchantPromotions.map(p => ({ ...p, source: "merchant" }));
+
+//   console.log("🔹 Merchant promotions fetched:", merchantPromotions.length);
+
+//   // 4️⃣ Fetch Admin Promotions
+//   let adminPromotions = await PromotionAdmin.find({
+//     customerSegment: { $in: [userSegment, "all_customer"] },
+//     status: "active",
+//   }).lean();
+//   adminPromotions = adminPromotions.map(p => ({ ...p, source: "admin" }));
+
+//   console.log("🔹 Admin promotions fetched:", adminPromotions.length);
+
+//   // 5️⃣ Deduplicate admin promotions that exist in merchant promotions
+//   const merchantIds = new Set(merchantPromotions.map(p => p._id.toString()));
+//   adminPromotions = adminPromotions.filter(p => !merchantIds.has(p._id.toString()));
+
+//   console.log("🔹 Admin promotions after dedup:", adminPromotions.length);
+
+//   // 6️⃣ Combine both arrays
+//   let promotions = [...merchantPromotions, ...adminPromotions];
+//   console.log("🔹 Total combined promotions before filter:", promotions.length);
+
+//   // 7️⃣ Filter by date, day, and already claimed cards
+//   const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+//   const existingPromotionIds = digitalCards.flatMap(card =>
+//     card.promotions.map(p => p.promotionId?.toString()).filter(Boolean)
+//   );
+
+//   promotions = promotions.filter(promo => {
+//     const startDate = new Date(promo.startDate);
+//     const endDate = new Date(promo.endDate);
+//     const isValidDate = today >= startDate && today <= endDate;
+//     const days = promo.availableDays || [];
+//     const isValidDay = days.includes("all") || days.includes(todayDay);
+//     const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
+//     return isValidDate && isValidDay && isNotInUserCard;
+//   });
+
+//   console.log("🔹 Promotions after date/day/userCard filter:", promotions.length);
+
+//   // 8️⃣ Attach rating info
+//   const promotionIds = promotions.map(p => p._id);
+//   const ratingsAgg = await Rating.aggregate([
+//     { $match: { promotionId: { $in: promotionIds } } },
+//     { $group: { _id: "$promotionId", averageRating: { $avg: "$rating" }, totalRatings: { $sum: 1 } } },
+//   ]);
+//   const ratingMap = new Map(
+//     ratingsAgg.map(r => [
+//       r._id.toString(),
+//       { averageRating: Number(r.averageRating.toFixed(1)), totalRatings: r.totalRatings },
+//     ])
+//   );
+
+//   promotions = promotions.map(promo => {
+//     const ratingData = ratingMap.get(promo._id.toString());
+//     return {
+//       ...promo,
+//       averageRating: ratingData?.averageRating || 0,
+//       totalRatings: ratingData?.totalRatings || 0,
+//     };
+//   });
+
+//   // 9️⃣ Sort by createdAt descending
+//   promotions.sort((a, b) =>
+//     new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime()
+//   );
+
+//   console.log("🔹 Promotions after sorting:", promotions.map(p => ({ id: p._id, source: (p as any).source })));
+
+//   // 10️⃣ Send response
+//   sendResponse(res, {
+//     statusCode: StatusCodes.OK,
+//     success: true,
+//     message: "Promotions retrieved successfully for user",
+//     data: promotions,
+//   });
+// });
+
 const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Response) => {
   const userId = (req.user as any)?._id;
   if (!userId) throw new ApiError(StatusCodes.UNAUTHORIZED, "User ID not found");
 
-  // 1️⃣ Get user segment
-  const userSegment = await PromotionService.getUserSegment(userId);
-
-  // 2️⃣ Today and day mapping
   const today = new Date();
   const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   const todayDay = dayMap[today.getDay()];
 
-  // 3️⃣ Fetch Merchant Promotions
-  let merchantPromotions = await Promotion.find({
-    customerSegment: { $in: [userSegment, "all_customer"] },
-    status: "active",
-  }).lean();
-  merchantPromotions = merchantPromotions.map(p => ({ ...p, source: "merchant" }));
+  // 1️⃣ Fetch all active merchant promotions
+  const allMerchantPromotions = await Promotion.find({ status: "active" }).lean();
+  console.log(`\n🔹 Total merchant promotions in DB: ${allMerchantPromotions.length}`);
+  allMerchantPromotions.forEach(p => {
+    console.log(`Promotion "${p.name}" | Merchant: ${p.merchantId} | Promo Segment: ${p.customerSegment}`);
+  });
 
-  console.log("🔹 Merchant promotions fetched:", merchantPromotions.length);
+  // 2️⃣ Merchant-wise segment filtering
+  const merchantPromotions: any[] = [];
+  for (const promo of allMerchantPromotions) {
+    const customer = await MerchantCustomer.findOne({
+      merchantId: promo.merchantId,
+      customerId: userId,
+    }).select("segment");
 
-  // 4️⃣ Fetch Admin Promotions
-  let adminPromotions = await PromotionAdmin.find({
-    customerSegment: { $in: [userSegment, "all_customer"] },
-    status: "active",
-  }).lean();
+    const userSegment = customer?.segment || "new_customer";
+
+    console.log(
+      `Checking promotion "${promo.name}" | Merchant: ${promo.merchantId} | ` +
+      `Promo Segment: ${promo.customerSegment} | User Segment: ${userSegment}`
+    );
+
+    if (promo.customerSegment === "all_customer" || promo.customerSegment === userSegment) {
+      merchantPromotions.push({ ...promo, source: "merchant", userSegment });
+      console.log(`➡ Will be shown to user ✅`);
+    } else {
+      console.log(`➡ Will NOT be shown to user ❌`);
+    }
+  }
+
+  console.log("🔹 Merchant promotions after segment filter:", merchantPromotions.length);
+
+  // 3️⃣ Fetch all active admin promotions
+  let adminPromotions = await PromotionAdmin.find({ status: "active" }).lean();
   adminPromotions = adminPromotions.map(p => ({ ...p, source: "admin" }));
-
   console.log("🔹 Admin promotions fetched:", adminPromotions.length);
 
-  // 5️⃣ Deduplicate admin promotions that exist in merchant promotions
+  // 4️⃣ Deduplicate admin promotions
   const merchantIds = new Set(merchantPromotions.map(p => p._id.toString()));
   adminPromotions = adminPromotions.filter(p => !merchantIds.has(p._id.toString()));
-
   console.log("🔹 Admin promotions after dedup:", adminPromotions.length);
 
-  // 6️⃣ Combine both arrays
+  // 5️⃣ Combine merchant + admin promotions
   let promotions = [...merchantPromotions, ...adminPromotions];
-  console.log("🔹 Total combined promotions before filter:", promotions.length);
+  console.log("🔹 Total combined promotions before date/day/userCard filter:", promotions.length);
 
-  // 7️⃣ Filter by date, day, and already claimed cards
+  // 6️⃣ Filter by date/day/userCard, but always include all_customer
   const digitalCards = await DigitalCard.find({ userId }).select("promotions");
   const existingPromotionIds = digitalCards.flatMap(card =>
     card.promotions.map(p => p.promotionId?.toString()).filter(Boolean)
   );
 
   promotions = promotions.filter(promo => {
+    const isAllCustomer = promo.customerSegment === "all_customer";
+
+    if (isAllCustomer) return true; // ✅ all_customer always included
+
     const startDate = new Date(promo.startDate);
     const endDate = new Date(promo.endDate);
-    const isValidDate = today >= startDate && today <= endDate;
     const days = promo.availableDays || [];
+    const isValidDate = today >= startDate && today <= endDate;
     const isValidDay = days.includes("all") || days.includes(todayDay);
     const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
+
+    console.log(
+      `Filtering promo "${promo.name}" | Segment: ${promo.customerSegment} | ` +
+      `Start: ${promo.startDate} End: ${promo.endDate} | Days: ${days.join(",")} | ` +
+      `isValidDate: ${isValidDate} | isValidDay: ${isValidDay} | NotInUserCard: ${isNotInUserCard}`
+    );
+
     return isValidDate && isValidDay && isNotInUserCard;
   });
 
   console.log("🔹 Promotions after date/day/userCard filter:", promotions.length);
 
+  // 7️⃣ Log final promotions
+  promotions.forEach(p => {
+    console.log(`✅ Final Promotion "${p.name}" | Merchant: ${p.merchantId} | Promo Segment: ${p.customerSegment} | User Segment: ${p.userSegment || 'N/A'}`);
+  });
+
   // 8️⃣ Attach rating info
   const promotionIds = promotions.map(p => p._id);
   const ratingsAgg = await Rating.aggregate([
     { $match: { promotionId: { $in: promotionIds } } },
-    { $group: { _id: "$promotionId", averageRating: { $avg: "$rating" }, totalRatings: { $sum: 1 } } },
+    {
+      $group: {
+        _id: "$promotionId",
+        averageRating: { $avg: "$rating" },
+        totalRatings: { $sum: 1 }
+      }
+    }
   ]);
+
   const ratingMap = new Map(
     ratingsAgg.map(r => [
       r._id.toString(),
-      { averageRating: Number(r.averageRating.toFixed(1)), totalRatings: r.totalRatings },
+      { averageRating: Number(r.averageRating.toFixed(1)), totalRatings: r.totalRatings }
     ])
   );
 
@@ -454,16 +588,16 @@ const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Respons
     return {
       ...promo,
       averageRating: ratingData?.averageRating || 0,
-      totalRatings: ratingData?.totalRatings || 0,
+      totalRatings: ratingData?.totalRatings || 0
     };
   });
 
   // 9️⃣ Sort by createdAt descending
   promotions.sort((a, b) =>
-    new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  console.log("🔹 Promotions after sorting:", promotions.map(p => ({ id: p._id, source: (p as any).source })));
+  console.log("🔹 Total promotions sent to user:", promotions.length);
 
   // 10️⃣ Send response
   sendResponse(res, {
@@ -490,7 +624,7 @@ export const PromotionController = {
   getUserTierOfMerchant,
   getPromotionsByUserCategory,
 
-  getPromotionsForUser,
+  // getPromotionsForUser,
   getCombinePromotionsForUser,
 
   getAllPromotionsOfAMerchant,
