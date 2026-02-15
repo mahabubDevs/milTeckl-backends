@@ -287,59 +287,70 @@ const getMerchantSales = async (req: Request, res: Response) => {
       });
     }
 
-    // Decide which ID to use for filtering
     const merchantId = user.isSubMerchant ? user.merchantId : user._id;
-    console.log("🔹 Filter by merchant ID:", merchantId);
 
     // -----------------------------
-    // 1️⃣ Date filter (UTC) based on period OR month
+    // 1️⃣ Date Filter (UTC)
     // -----------------------------
     const period = req.query.period as string;
-    const monthParam = req.query.month as string; // 1-12
+    const monthParam = req.query.month as string;
     const now = new Date();
     let dateFilter: any = {};
 
     if (monthParam) {
-      const month = Number(monthParam) - 1; // JS month 0-11
-      const year = now.getFullYear();
-      const startOfMonth = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
-      const endOfMonth = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
-      dateFilter = { createdAt: { $gte: startOfMonth, $lte: endOfMonth } };
+      const month = Number(monthParam) - 1;
+      const year = now.getUTCFullYear();
+      const startOfMonth = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+      const endOfMonth = new Date(
+        Date.UTC(year, month + 1, 0, 23, 59, 59, 999)
+      );
+      dateFilter.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
     } else if (period === "day") {
-      const startOfDayUTC = new Date(
+      const startOfDay = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
       );
-      dateFilter = { createdAt: { $gte: startOfDayUTC } };
+      dateFilter.createdAt = { $gte: startOfDay };
     } else if (period === "week") {
-      const startOfWeekUTC = new Date(
+      const startOfWeek = new Date(
         Date.UTC(
           now.getUTCFullYear(),
           now.getUTCMonth(),
           now.getUTCDate() - now.getUTCDay()
         )
       );
-      dateFilter = { createdAt: { $gte: startOfWeekUTC } };
+      dateFilter.createdAt = { $gte: startOfWeek };
     } else if (period === "month") {
-      const startOfMonthUTC = new Date(
+      const startOfMonth = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
       );
-      dateFilter = { createdAt: { $gte: startOfMonthUTC } };
+      dateFilter.createdAt = { $gte: startOfMonth };
     }
 
-       // -----------------------------
-    // 2️⃣ Search keyword → searchTerm
     // -----------------------------
-    const searchTerm = (req.query.searchTerm as string)?.toLowerCase() || "";
+    // 2️⃣ Search Term
+    // -----------------------------
+    const searchTerm =
+      (req.query.searchTerm as string)?.toLowerCase() || "";
 
     // -----------------------------
-    // 3️⃣ Fetch sales
+    // 3️⃣ Pagination
     // -----------------------------
-    const sales = await Sell.find({ merchantId, ...dateFilter })
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // -----------------------------
+    // 4️⃣ Fetch Sales
+    // -----------------------------
+    let sales = await Sell.find({ merchantId, ...dateFilter })
       .populate(
         "userId",
         "firstName lastName email phone profile customUserId"
       )
       .populate("digitalCardId", "cardCode")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     if (!sales || sales.length === 0) {
@@ -352,96 +363,55 @@ const getMerchantSales = async (req: Request, res: Response) => {
     }
 
     // -----------------------------
-    // 4️⃣ Apply SEARCH (JS level)
+    // 5️⃣ Apply SEARCH
     // -----------------------------
-    let filteredSales = sales;
     if (searchTerm) {
-      filteredSales = sales.filter((tx: any) => {
-        const user = tx.userId || {};
-        const card = tx.digitalCardId || {};
+      sales = sales.filter((tx: any) => {
+        const u = tx.userId || {};
+        const c = tx.digitalCardId || {};
         return (
-          user.firstName?.toLowerCase().includes(searchTerm) ||
-          user.lastName?.toLowerCase().includes(searchTerm) ||
-          user.email?.toLowerCase().includes(searchTerm) ||
-          user.phone?.toLowerCase().includes(searchTerm) ||
-          card.cardCode?.toLowerCase().includes(searchTerm)
+          u.firstName?.toLowerCase().includes(searchTerm) ||
+          u.lastName?.toLowerCase().includes(searchTerm) ||
+          u.email?.toLowerCase().includes(searchTerm) ||
+          u.phone?.toLowerCase().includes(searchTerm) ||
+          c.cardCode?.toLowerCase().includes(searchTerm)
         );
       });
     }
 
+    const total = await Sell.countDocuments({ merchantId, ...dateFilter });
 
     // -----------------------------
-    // 5️⃣ Aggregate user data
+    // 6️⃣ Prepare Transaction Response (Aggregated field names maintained)
     // -----------------------------
-    interface IUserSummary {
-      _id: string;
-      name: string;
-      email?: string;
-      phone?: string;
-      profile?: string;
-      totalTransactions: number;
-      totalPointsEarned: number;
-      totalPointsRedeemed: number;
-      totalBilled?: number;
-      finalBilled?: number;
-      cardIds?: string;
-      status?: string;
-      customUserId?: string;
-    }
-
-    const userMap: Record<string, IUserSummary> = {};
-    filteredSales.forEach((tx: any) => {
-      const user = tx.userId;
-      if (!user || !user._id) return;
-
-      const userId = user._id.toString();
-      if (!userMap[userId]) {
-        userMap[userId] = {
-          _id: userId,
-          name: `${user.firstName} ${user.lastName || ""}`.trim(),
-          email: user.email,
-          phone: user.phone,
-          profile: user.profile,
-          customUserId: user.customUserId || "",
-          totalTransactions: 0,
-          totalPointsEarned: 0,
-          totalPointsRedeemed: 0,
-          totalBilled: 0,
-          finalBilled: 0,
-          cardIds: "",
-          status: "",
-        };
-      }
-
-      userMap[userId].totalTransactions += 1;
-      userMap[userId].totalPointsEarned += tx.pointsEarned || 0;
-      userMap[userId].totalPointsRedeemed += tx.pointRedeemed || 0;
-      userMap[userId].totalBilled! += tx.totalBill || 0;
-      userMap[userId].finalBilled! += tx.discountedBill || 0;
-      userMap[userId].status = tx.status || "";
-
-      if (tx.digitalCardId?.cardCode) {
-        userMap[userId].cardIds = tx.digitalCardId.cardCode;
-      }
-    });
+    const transactionData = sales.map((tx: any) => ({
+      _id: tx.userId?._id,  // user ID for consistency with previous aggregated format
+      name: `${tx.userId?.firstName || ""} ${tx.userId?.lastName || ""}`.trim(),
+      email: tx.userId?.email,
+      phone: tx.userId?.phone,
+      profile: tx.userId?.profile,
+      customUserId: tx.userId?.customUserId,
+      totalTransactions: 1, // each transaction = 1
+      totalPointsEarned: tx.pointsEarned || 0,
+      totalPointsRedeemed: tx.pointRedeemed || 0,
+      totalBilled: tx.totalBill || 0,
+      finalBilled: tx.discountedBill || 0,
+      cardIds: tx.digitalCardId?.cardCode || "",
+      status: tx.status || "",
+      createdAt: tx.createdAt,
+    }));
 
     // -----------------------------
-    // 6️⃣ Pagination
+    // 7️⃣ Response
     // -----------------------------
-    const customers = Object.values(userMap);
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const paginatedCustomers = customers.slice(skip, skip + limit);
-
     return res.status(200).json({
       success: true,
-      data: paginatedCustomers,
+      data: transactionData,
       pagination: {
         page,
         limit,
-        total: customers.length,
-        totalPage: Math.ceil(customers.length / limit),
+        total,
+        totalPage: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -449,6 +419,7 @@ const getMerchantSales = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
 
 
 

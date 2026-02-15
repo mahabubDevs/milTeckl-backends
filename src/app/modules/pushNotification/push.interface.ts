@@ -14,7 +14,7 @@ export interface IPushResponse {
 
 
 export interface IPushPayload {
-  sendType: "ALL" | "SPECIFIC";
+  sendType: "ALL" | "MERCENT" | "USER";
   title: string;
   body: string;
   country?: string;

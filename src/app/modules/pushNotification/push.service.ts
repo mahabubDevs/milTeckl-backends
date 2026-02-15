@@ -18,65 +18,44 @@ const sendNotificationToAllUsers = async (
   payload: IPushPayload,
   adminId: string
 ) => {
-  const {
-    sendType,
-    title,
-    body,
-    country,
-    tier,
-    subscriptionType,
-    status,
-  } = payload;
+  const { sendType, title, body, country, tier, subscriptionType, status } = payload;
 
   try {
     console.log("[Notification] Payload received:", payload);
     console.log("[Notification] Admin ID:", adminId);
 
-    // 1️⃣ Base filter
-    const userFilter: any = {
-      fcmToken: { $exists: true, $ne: null },
-    };
+    // 1️⃣ Base filter: Only users with fcmToken
+    const userFilter: any = { fcmToken: { $exists: true, $ne: null } };
 
-    console.log("[Notification] Base user filter:", userFilter);
+    // 2️⃣ Role filter based on sendType
+    if (sendType === "MERCENT") userFilter.role = "MERCENT";
+    else if (sendType === "USER") userFilter.role = "USER";
+    // if sendType is ALL, no role filter (send to all users)
 
-    // 2️⃣ Apply SPECIFIC filters
-    if (sendType === "SPECIFIC") {
-      if (country) {
-        userFilter.country = { $regex: `^${country}$`, $options: "i" };
-      }
-      if (tier) {
-        userFilter.tier = tier.toUpperCase();
-      }
-      if (subscriptionType) {
-        userFilter.subscription = { $regex: `^${subscriptionType}$`, $options: "i" };
-      }
-      if (status) {
-        userFilter.status = { $regex: `^${status}$`, $options: "i" };
-      }
+    // 3️⃣ Optional filters (same as before)
+    if (country) userFilter.country = { $regex: `^${country}$`, $options: "i" };
+    if (tier) userFilter.tier = tier.toUpperCase();
+    if (subscriptionType)
+      userFilter.subscription = { $regex: `^${subscriptionType}$`, $options: "i" };
+    if (status) userFilter.status = { $regex: `^${status}$`, $options: "i" };
 
-      console.log("[Notification] Updated SPECIFIC user filter:", userFilter);
-    }
+    console.log("[Notification] Final user filter:", userFilter);
 
-
-    // 3️⃣ Fetch users
+    // 4️⃣ Fetch users
     const users = await User.find(userFilter).select("fcmToken _id");
-    console.log(`[Notification] Users fetched: ${users}`);
+    console.log(`[Notification] Users fetched: ${users.length}`);
 
     const tokens: string[] = [];
-    console.log("[Notification] Preparing tokens for push");
     const userIds: Types.ObjectId[] = [];
-    console.log("[Notification] User IDs for notification records");
+
     users.forEach((u) => {
       if (u.fcmToken) {
-        tokens.push(u.fcmToken);  // push token
-        userIds.push(u._id);      // push user _id
+        tokens.push(u.fcmToken);
+        userIds.push(u._id);
       }
     });
 
-    console.log("[Notification] Tokens found:", tokens);
-
     if (tokens.length === 0) {
-      console.log("[Notification] No tokens to send push");
       return {
         sentCount: 0,
         failedCount: 0,
@@ -84,20 +63,11 @@ const sendNotificationToAllUsers = async (
       };
     }
 
-    // 4️⃣ Send push via Firebase - CORRECTED METHOD
-    const message = {
-      notification: { 
-        title, 
-        body 
-      },
-      tokens, // Maximum 500 tokens at a time
-    };
-
-    console.log("[Notification] Message prepared for Firebase:", message);
-
-    // ✅ Use sendEachForMulticast instead of sendAll
+    // 5️⃣ Send push via Firebase
+    const message = { notification: { title, body }, tokens };
     const response = await admin.messaging().sendEachForMulticast(message);
 
+    // 6️⃣ Save notification in DB
     await sendNotification({
       userIds,
       title,
@@ -108,21 +78,13 @@ const sendNotificationToAllUsers = async (
     });
     console.log("[Notification] Notification records created");
 
-    console.log(
-      `[Notification] Push sent. Success: ${response.successCount}, Failed: ${response.failureCount}`
-    );
-
-    // Optional: Log failed tokens
+    // 7️⃣ Remove invalid tokens
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          console.error(`[Notification] Failed token: ${tokens[idx]}`, resp.error);
-          failedTokens.push(tokens[idx]);
-        }
+        if (!resp.success) failedTokens.push(tokens[idx]);
       });
-      
-      // Remove invalid tokens from database
+
       if (failedTokens.length > 0) {
         await User.updateMany(
           { fcmToken: { $in: failedTokens } },
