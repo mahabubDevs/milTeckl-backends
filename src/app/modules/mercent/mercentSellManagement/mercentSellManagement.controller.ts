@@ -17,7 +17,8 @@ import ExcelJ from "exceljs";
 
 
 const checkout = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, totalBill, promotionId, pointRedeemed } = req.body;
+  const { digitalCardCode, totalBill, promotionId = [], pointRedeemed = 0 } = req.body;
+
   console.log("Checkout request body:", req.body);
 
   if (!req.user) {
@@ -28,12 +29,8 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // -----------------------------
-  // Safe casting to IUser
-  // -----------------------------
   const user = req.user as IUser;
 
-  // Only allow merchant or sub-merchant
   if (user.role !== "MERCENT" && !user.isSubMerchant) {
     return sendResponse(res, {
       statusCode: StatusCodes.FORBIDDEN,
@@ -42,9 +39,6 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // -----------------------------
-  // Resolve real merchant ID
-  // -----------------------------
   const merchantId = user.isSubMerchant ? user.merchantId : user._id;
 
   if (!merchantId) {
@@ -55,14 +49,18 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // -----------------------------
-  // Call service
-  // -----------------------------
+  // ✅ always pass as array
+  const promotionIdsArray = Array.isArray(promotionId)
+    ? promotionId
+    : promotionId
+    ? [promotionId]
+    : [];
+
   const result = await SellService.checkout(
-    merchantId.toString(),  // always the real merchant
+    merchantId.toString(),
     digitalCardCode,
     totalBill,
-    promotionId,
+    promotionIdsArray,   // ✅ fixed
     pointRedeemed
   );
 
@@ -73,6 +71,7 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
 
 
 

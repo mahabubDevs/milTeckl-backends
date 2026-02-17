@@ -73,7 +73,11 @@ const userSchema = new Schema<IUser, UserModal>(
         referredBy: {
           type: String,
           required: false,
-        }
+        },
+        referredUserId: {
+          type: String,
+          required: false,
+        },
       }
 
     },

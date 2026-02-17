@@ -121,6 +121,7 @@ export interface IUser {
   referredInfo?: {
     referredId: string;
     referredBy: string;
+    referredUserId?: Types.ObjectId;
   };
   salesRep?: string;
   role?: string;

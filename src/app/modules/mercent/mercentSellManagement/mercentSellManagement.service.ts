@@ -246,7 +246,7 @@ const checkout = async (
     const discountPercentage = promotion.discountPercentage || 0;
     const discountAmount = (grossValue * discountPercentage) / 100;
 
-    totalGrossValue += grossValue;   
+    totalGrossValue += grossValue;
     totalDiscount += discountAmount;
 
     console.log(`🔹 Promotion applied: ${promoId}`, {
@@ -273,7 +273,7 @@ const checkout = async (
   console.log("🔹 Final Bill:", finalBill);
 
   // ===============================
-  // ⭐ Points Earn Calculation (requestApproval style)
+  // ⭐ Points Earn Calculation
   // ===============================
   const netBillForPoint = Math.max(totalBill - totalGrossValue, 0);
 
@@ -286,7 +286,6 @@ const checkout = async (
   const accumulationPercentage = userTier?.accumulationRule || 0;
 
   const eligibleAmount = (netBillForPoint * accumulationPercentage) / 100;
-
   const pointsEarned = parseFloat((eligibleAmount / POINT_EARN_RATE).toFixed(4));
 
   console.log("🔹 Tier:", userTier?.name || "N/A");
@@ -298,7 +297,7 @@ const checkout = async (
   // ===============================
   // 🔹 Approval condition
   // ===============================
-  const needApproval = pointRedeemed > 0; // only pointRedeemed triggers approval
+  const needApproval = pointRedeemed > 0;
 
   // ===============================
   // 🧾 Create Sell Record
@@ -308,7 +307,9 @@ const checkout = async (
     userId: digitalCard.userId,
     digitalCardId: digitalCard._id,
     digitalCardCode,
-    promotionId: promotionIds.length ? promotionIds : undefined, // optional
+
+    // ✅ FIXED HERE (ARRAY SUPPORT)
+    promotionIds: promotionIds.length ? promotionIds : [],
 
     totalBill,
     totalGrossValue,
@@ -322,7 +323,7 @@ const checkout = async (
     netBillForPoint,
     accumulationPercentage,
     eligibleAmount,
-    pointsEarned, 
+    pointsEarned,
 
     status: needApproval ? "pending" : "completed",
   });
@@ -332,33 +333,35 @@ const checkout = async (
   // ===============================
   // 🔔 Update Digital Card Points
   // ===============================
-  // ===============================
-// 🔔 Update Digital Card Points (ONLY if no approval needed)
-// ===============================
-if (!needApproval) {
-  digitalCard.availablePoints = digitalCard.availablePoints - pointRedeemed + pointsEarned;
-  digitalCard.lifeTimeEarnPoints = (digitalCard.lifeTimeEarnPoints || 0) + pointsEarned;
+  if (!needApproval) {
+    digitalCard.availablePoints =
+      digitalCard.availablePoints - pointRedeemed + pointsEarned;
 
-  for (const promoId of promotionIds) {
-    const promoInCard = digitalCard.promotions.find(
-      p => p.promotionId?.toString() === promoId
-    );
-    if (promoInCard) {
-      promoInCard.status = "used";
-      promoInCard.usedAt = new Date();
+    digitalCard.lifeTimeEarnPoints =
+      (digitalCard.lifeTimeEarnPoints || 0) + pointsEarned;
+
+    for (const promoId of promotionIds) {
+      const promoInCard = digitalCard.promotions.find(
+        p => p.promotionId?.toString() === promoId
+      );
+      if (promoInCard) {
+        promoInCard.status = "used";
+        promoInCard.usedAt = new Date();
+      }
     }
+
+    await digitalCard.save();
+
+    console.log(
+      "🔹 DigitalCard updated. Available Points:",
+      digitalCard.availablePoints
+    );
+  } else {
+    console.log("🔹 Approval pending, DigitalCard points not updated yet.");
   }
 
-  await digitalCard.save();
-
-  console.log("🔹 DigitalCard updated. Available Points:", digitalCard.availablePoints);
-} else {
-  console.log("🔹 Approval pending, DigitalCard points not updated yet.");
-}
-
-
   // ===============================
-  // 🔔 Socket Approval (if needed)
+  // 🔔 Socket Approval
   // ===============================
   if (needApproval) {
     const io = (global as any).io;
@@ -376,7 +379,10 @@ if (!needApproval) {
         message: "Merchant requested checkout approval",
       });
 
-      console.log("💠 Approval request sent to user:", digitalCard.userId.toString());
+      console.log(
+        "💠 Approval request sent to user:",
+        digitalCard.userId.toString()
+      );
     }
   }
 
@@ -386,8 +392,6 @@ if (!needApproval) {
 
   return sell;
 };
-
-
 
 
 
@@ -867,8 +871,8 @@ const approvePromotion = async (
   // -------------------------------
   // 💰 Finalize Points (Fraction safe)
   // -------------------------------
-  const redeemed = parseFloat((sell.pointRedeemed || 0).toFixed(4));
-  const earned = parseFloat((sell.pointsEarned || 0).toFixed(4));
+  const redeemed = parseFloat(((sell.pointRedeemed as number) || 0).toFixed(4));
+  const earned = parseFloat(((sell.pointsEarned as number) || 0).toFixed(4));
 
   digitalCard.availablePoints = parseFloat(
     ((digitalCard.availablePoints || 0) - redeemed + earned).toFixed(4)
@@ -1044,7 +1048,7 @@ const getPointsHistory = async (
     const ratingDoc = await Rating.findOne({
       userId: tx.userId,
       merchantId: merchant?._id,
-      promotionId: tx.promotionId,
+      promotionId: tx.promotionIds?.[0],
       digitalCardId: tx.digitalCardId,
     })
       .select("rating")
@@ -1057,7 +1061,7 @@ const getPointsHistory = async (
     // ✅ Earn Points
     if (
       (typeSanitized === "all" || typeSanitized === "earn") &&
-      (tx.pointsEarned ?? 0) > 0
+      ((tx.pointsEarned as number) ?? 0) > 0
     ) {
       result.push({
         id: tx._id,
@@ -1068,7 +1072,7 @@ const getPointsHistory = async (
         totalBill: tx.totalBill,
         discountedBill: tx.discountedBill,
         date: tx.createdAt,
-        promotionId: tx.promotionId,
+        promotionIds: tx.promotionIds,
 
         merchant: merchantName,
         merchantProfile: merchant?.profile,
@@ -1081,7 +1085,7 @@ const getPointsHistory = async (
     // ✅ Used Points
     if (
       (typeSanitized === "all" || typeSanitized === "use") &&
-      (tx.pointRedeemed ?? 0) > 0
+      ((tx.pointRedeemed as number) ?? 0) > 0
     ) {
       result.push({
         id: tx._id,
@@ -1092,7 +1096,7 @@ const getPointsHistory = async (
         totalBill: tx.totalBill,
         discountedBill: tx.discountedBill,
         date: tx.createdAt,
-        promotionId: tx.promotionId,
+        promotionIds: tx.promotionIds,
 
         merchant: merchantName,
         merchantProfile: merchant?.profile,

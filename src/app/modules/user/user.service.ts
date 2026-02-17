@@ -69,37 +69,36 @@ const createUserToDB = async (payload: CreateUserPayload): Promise<IUser> => {
 
   let user: IUser | null = null;
 
-// Update
-if (isExitByEmail || isExitByPhone) {
-  const existingUser = isExitByEmail || isExitByPhone;
-  user = await User.findByIdAndUpdate(existingUser._id, payload, { new: true });
-  if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to update existing user");
+  // 2️⃣ Update existing user
+  if (isExitByEmail || isExitByPhone) {
+    const existingUser = isExitByEmail || isExitByPhone;
+    user = await User.findByIdAndUpdate(existingUser._id, payload, { new: true });
+    if (!user) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to update existing user");
+    }
+  } else {
+    // 3️⃣ Create new user
+    const referenceId = await createUniqueReferralId();
+    const customUserId = await generateCustomUserId(payload.role as string);
+
+    const userData = {
+      ...payload,
+      referenceId,
+      customUserId,
+      status:
+        payload.role === USER_ROLES.MERCENT
+          ? USER_STATUS.INACTIVE
+          : USER_STATUS.ACTIVE,
+      ...(payload.role === USER_ROLES.MERCENT && {
+        approveStatus: APPROVE_STATUS.PENDING,
+      }),
+    };
+
+    user = await User.create(userData);
+    if (!user) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
+    }
   }
-} else {
-  // Create
-  const referenceId = await createUniqueReferralId();
-  const customUserId = await generateCustomUserId(payload.role as string);
-
-  const userData = {
-    ...payload,
-    referenceId,
-    customUserId,
-    status:
-      payload.role === USER_ROLES.MERCENT
-        ? USER_STATUS.INACTIVE
-        : USER_STATUS.ACTIVE,
-    ...(payload.role === USER_ROLES.MERCENT && {
-      approveStatus: APPROVE_STATUS.PENDING,
-    }),
-  };
-
-  user = await User.create(userData);
-  if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
-  }
-}
-
 
   // 4️⃣ Handle referral if exists
   if (payload?.referredId && !user.referredInfo) {
@@ -111,6 +110,7 @@ if (isExitByEmail || isExitByPhone) {
     const referredInfo = {
       referredId: payload.referredId,
       referredBy: `${referrer.firstName} ${referrer.lastName || ""}`,
+      referredUserId: referrer._id, // ✅ ObjectId stored for referral logic
     };
 
     await User.findByIdAndUpdate(user._id, { $set: { referredInfo } });
@@ -161,6 +161,7 @@ if (isExitByEmail || isExitByPhone) {
 
   return user;
 };
+
 
 
 

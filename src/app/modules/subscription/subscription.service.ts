@@ -14,42 +14,26 @@ import { calculateEndDate } from "../../../helpers/dateHelper";
 import { SUBSCRIPTION_STATUS } from "../../../enums/user";
 import { TransactionHistory } from "../transectionHistory/transection.model";
 
+// =========================
+// createSubscriptionSession
+// =========================
 const createSubscriptionSession = async (userId: string, packageId: string) => {
   console.log("🚀 createSubscriptionSession called");
   console.log("UserId:", userId, "PackageId:", packageId);
 
-  // Package check
   const pkg = await Package.findById(packageId);
-  if (!pkg) {
-    console.log("❌ Package not found");
-    throw new Error("Package not found");
-  }
-  console.log("📦 Package found:", pkg.title, "isFreeTrial:", pkg.isFreeTrial);
+  if (!pkg) throw new Error("Package not found");
+  console.log(`✅ Package found: ${pkg.title}, isFreeTrial: ${pkg.isFreeTrial}`);
 
-  // User check
   const user = await User.findById(userId);
-  if (!user) {
-    console.log("❌ User not found");
-    throw new Error("User not found");
-  }
-  console.log("👤 User found:", user.firstName, user.email);
+  if (!user) throw new Error("User not found");
+  console.log(`👤 User found: ${user.firstName}, Email: ${user.email}, Points: ${user.points}`);
 
-  // Free plan check
+  // Free trial
   if (pkg.isFreeTrial) {
-    console.log("⚡ Free plan detected");
+    const hasUsedFreePlan = await Subscription.exists({ user: userId, package: packageId });
+    if (hasUsedFreePlan) throw new Error("You have already used the free plan");
 
-    const hasUsedFreePlan = await Subscription.exists({
-      user: userId,
-      package: packageId,
-    });
-    console.log("Has user already used free plan?", hasUsedFreePlan);
-
-    if (hasUsedFreePlan) {
-      console.log("❌ User already used free plan");
-      throw new Error("You have already used the free plan");
-    }
-
-    // Free plan → DB only
     const subscription = await Subscription.create({
       user: userId,
       package: packageId,
@@ -63,113 +47,66 @@ const createSubscriptionSession = async (userId: string, packageId: string) => {
       customerId: null,
     });
 
-    // 🔥 PROFILE SUBSCRIPTION STATUS UPDATE
-    await User.findByIdAndUpdate(userId, {
-      subscription: SUBSCRIPTION_STATUS.ACTIVE,
-    });
-
-    console.log("✅ Free plan subscription created:", subscription);
-
+    await User.findByIdAndUpdate(userId, { subscription: SUBSCRIPTION_STATUS.ACTIVE });
+    console.log("✅ Free plan subscription created:", subscription._id);
     return { sessionId: null, url: null, subscription };
   }
 
-  // Paid plan → Stripe
+  // Paid plan
   console.log("💰 Paid plan detected");
+  let userPoints = user.points || 0;
+  let finalPrice = pkg.price;
+  const maxDiscount = pkg.price * 0.8;
+  const usablePoints = Math.min(userPoints, maxDiscount);
 
-  // Check if user already bought any plan (Free or Paid)
-  const hasAnyPlanBefore = await Subscription.exists({
-    user: userId,
-  });
-  console.log("Has user any previous plan?", hasAnyPlanBefore);
-
-  let pointsToAdd = 0;
-
-  if (!hasAnyPlanBefore) {
-    pointsToAdd = Math.round(pkg.price * 0.2);
-
-    await User.findByIdAndUpdate(userId, { $inc: { points: pointsToAdd } });
-    console.log(`💎 Added ${pointsToAdd} points to user ${userId}`);
+  if (usablePoints > 0) {
+    finalPrice -= usablePoints;
+    console.log(`💎 Final price after points: ${finalPrice}`);
   }
 
-  if (pointsToAdd > 0) {
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { $inc: { points: 0 } },
-      { new: true }
-    );
-
-    await TransactionHistory.create({
-      userId,
-      type: "EARN",
-      points: pointsToAdd,
-      source: "SUBSCRIPTION_BONUS",
-      subscriptionId: pkg._id,
-      balanceAfter: updatedUser!.points,
-    });
-
-    console.log("📜 Transaction created for points earn");
-  }
-
-  if (!pkg.priceId) {
-    console.log("❌ priceId missing for paid package");
-    throw new Error("PriceId missing for paid package");
-  }
-
- // Get user points
-let userPoints = user.points || 0;
-let finalPrice = pkg.price;
-let stripePriceId: string;
-
-if (userPoints > 0) {
-  finalPrice = Math.max(pkg.price - userPoints, 1);
-
-  // Check if priceId already exists for this points
+  // Stripe Price logic
   pkg.priceIdWithPoints = pkg.priceIdWithPoints || {};
+  let stripePriceId: string;
 
-  if (pkg.priceIdWithPoints[userPoints]) {
-    // ✅ Existing Stripe price for this points → reuse
-    stripePriceId = pkg.priceIdWithPoints[userPoints];
-    console.log("ℹ️ Reusing existing Stripe Price:", stripePriceId);
+  if (usablePoints > 0) {
+    if (pkg.priceIdWithPoints[usablePoints]) {
+      stripePriceId = pkg.priceIdWithPoints[usablePoints];
+    } else {
+      const stripePrice = await stripe.prices.create({
+        product: pkg.productId,
+        unit_amount: Math.round(finalPrice * 100),
+        currency: "usd",
+        recurring: {
+          interval: pkg.paymentType?.toLowerCase() === "monthly" ? "month" : "year",
+        },
+      });
+      stripePriceId = stripePrice.id;
+      pkg.priceIdWithPoints[usablePoints] = stripePriceId;
+      await Package.findByIdAndUpdate(pkg._id, { priceIdWithPoints: pkg.priceIdWithPoints });
+    }
   } else {
-    // ❌ Create new Stripe Price for this points
-    const stripePrice = await stripe.prices.create({
-      product: pkg.productId,
-      unit_amount: Math.round(finalPrice * 100),
-      currency: "usd",
-      recurring: { interval: pkg.paymentType?.toLowerCase() === "monthly" ? "month" : "year" },
-    });
-
-    stripePriceId = stripePrice.id;
-    console.log("✅ New Stripe Price created:", stripePriceId);
-
-    // Save to package DB for future reuse
-    pkg.priceIdWithPoints[userPoints] = stripePriceId;
-    await Package.findByIdAndUpdate(pkg._id, { priceIdWithPoints: pkg.priceIdWithPoints });
+    stripePriceId = pkg.priceId!;
   }
-} else {
-  // Points = 0 → use original price
-  stripePriceId = pkg.priceId;
-  console.log("ℹ️ No points used → using original Stripe Price:", stripePriceId);
-}
 
+  // ✅ Checkout session
+  const session: Stripe.Checkout.Session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: "subscription",
+    customer_email: user.email,
+    line_items: [{ price: stripePriceId, quantity: 1 }],
+    success_url: `https://miltech-business-dashboard-api.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `https://miltech-business-dashboard-api.vercel.app/failed`,
+    client_reference_id: userId.toString(),
+    metadata: {
+      packageId: pkg._id.toString(),
+      pointsUsed: usablePoints.toString(),
+    },
+  });
 
-
-// Stripe Checkout session
-const session = await stripe.checkout.sessions.create({
-  payment_method_types: ["card"],
-  mode: "subscription",
-  customer_email: user.email,
-  line_items: [{ price: stripePriceId, quantity: 1 }],
-  success_url: `https://miltech-business-dashboard-api.vercel.app/success?session_id={CHECKOUT_SESSION_ID}`,
-  cancel_url: `https://miltech-business-dashboard-api.vercel.app/failed`,
-  client_reference_id: userId.toString(),
-  metadata: { packageId: pkg._id.toString(), pointsUsed: userPoints },
-});
-
-console.log("✅ Stripe checkout session created:", session.id, session.url);
-
-return { sessionId: session.id, url: session.url };
+  console.log("✅ Stripe checkout session created:", session.id, session.url);
+  return { sessionId: session.id, url: session.url };
 };
+
 
 
 
@@ -180,140 +117,178 @@ return { sessionId: session.id, url: session.url };
 
 
 const activateSubscriptionInDB = async (
-    userId: string,
-    packageId: string,
-    stripeSubscription: any
+  userId: string,
+  packageId: string,
+  stripeSubscription: any
 ): Promise<ISubscription> => {
 
-    console.log("🚀 Activating subscription in DB", { userId, packageId, stripeSubscriptionId: stripeSubscription.id });
+  console.log("==================================================");
+  console.log("🚀 Activating subscription in DB");
+  console.log({
+    userId,
+    packageId,
+    stripeSubscriptionId: stripeSubscription?.id
+  });
+  console.log("==================================================");
 
-    // Prevent duplicate subscription
-    const existingSub = await Subscription.findOne({ subscriptionId: stripeSubscription.id });
-    if (existingSub) {
-        console.log("⚠️ Subscription already exists in DB", existingSub._id);
-        // Update user profile correctly
-        await User.findByIdAndUpdate(userId, { subscription: "active" }, { new: true });
+  // 🔍 Prevent duplicate subscription
+  const existingSub = await Subscription.findOne({
+    subscriptionId: stripeSubscription.id
+  });
 
-        const result = await Referral.findOne({
-            referredUser: userId
-        })
-        if (result && !result.completed) {
-            console.log("🚀 Processing referral for user: existing", userId);
-            await PointTransaction.create({
-                user: userId,
-                type: "EARN",
-                source: "REFERRAL",
-                referral: result._id,
-                points: 10,
-                note: "Referral points",
-            })
-            await PointTransaction.create({
-                user: result.referrer,
-                type: "EARN",
-                source: "REFERRAL",
-                referral: result._id,
-                points: 10,
-                note: "Referral points",
-            })
+  console.log("🔎 Existing Subscription Found:", !!existingSub);
 
-            await User.findByIdAndUpdate(
-                result.referrer,
-                { $inc: { points: 10 } },
-                { new: true }
-            );
+  if (existingSub) {
+    console.log("⚠️ Subscription already exists in DB:", existingSub._id);
 
-            await User.findByIdAndUpdate(
-                userId,
-                { $inc: { points: 10 } },
-                { new: true }
-            );
+    await User.findByIdAndUpdate(userId, {
+      subscription: "active"
+    });
 
-            await sendNotification({ userIds: [result.referrer.toString()], title: "Referral points", body: "You have earned 10 points for referring a new user", type: NotificationType.REFERRAL });
-            await sendNotification({ userIds: [userId.toString()], title: "Referral points", body: "You have earned 10 points for using referral code", type: NotificationType.REFERRAL });
-            result.completed = true;
-            await result.save();
-        }
-        return existingSub;
-    }
+    console.log("✅ User subscription status updated to active (duplicate case)");
+    return existingSub;
+  }
 
-    const subscriptionData: Partial<ISubscription> = {
-        user: new Types.ObjectId(userId),
-        package: new Types.ObjectId(packageId),
-        price: stripeSubscription.plan?.amount / 100 || 0,
-        customerId: stripeSubscription.customer,
-        subscriptionId: stripeSubscription.id,
-        remaining: 0,
-        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000).toISOString(),
-        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
-        trxId: stripeSubscription.latest_invoice || "N/A",
-        status: stripeSubscription.status === "active" ? "active" : "expired",
-    };
+  // 📦 Prepare subscription data
+  const subscriptionData: Partial<ISubscription> = {
+    user: new Types.ObjectId(userId),
+    package: new Types.ObjectId(packageId),
+    price: stripeSubscription.plan?.amount / 100 || 0,
+    customerId: stripeSubscription.customer,
+    subscriptionId: stripeSubscription.id,
+    remaining: 0,
+    currentPeriodStart: new Date(
+      stripeSubscription.current_period_start * 1000
+    ).toISOString(),
+    currentPeriodEnd: new Date(
+      stripeSubscription.current_period_end * 1000
+    ).toISOString(),
+    trxId: stripeSubscription.latest_invoice || "N/A",
+    status: stripeSubscription.status === "active" ? "active" : "expired",
+  };
 
-    console.log("📌 Subscription data prepared:", subscriptionData);
+  console.log("📌 Subscription Data Prepared:");
+  console.log(subscriptionData);
 
-    const subscription = await Subscription.create(subscriptionData);
+  // 💾 Save subscription
+  const subscription = await Subscription.create(subscriptionData);
+  console.log("✅ Subscription Saved Successfully:", subscription._id);
 
-    console.log("✅ Subscription saved:", subscription);
+  // 👤 Update user profile
+  await User.findByIdAndUpdate(userId, {
+    subscription: "active"
+  });
 
-    // Update user profile
-    await User.findByIdAndUpdate(userId, { subscription: "active" }, { new: true });
-    const result = await Referral.findOne({
-        referredUser: userId
-    })
-    if (result && !result.completed) {
-        console.log("🚀 Processing referral for user: new", userId);
-        const referredUser = await User.findById(userId).select("firstName lastName");
-        const referrerUser = await User.findById(result.referrer).select("firstName lastName");
+  console.log("✅ User subscription field updated to active");
 
-        const referredUserName = `${referredUser?.firstName || ""} ${referredUser?.lastName || ""}`.trim();
-        const referrerUserName = `${referrerUser?.firstName || ""} ${referrerUser?.lastName || ""}`.trim();
+  // ======================================================
+  // 🔥 Referral Bonus (20% to referrer ONLY)
+  // ======================================================
 
-        // Create point transactions
-        await PointTransaction.create({
-            user: userId,
-            type: "EARN",
-            source: "REFERRAL",
-            referral: result._id,
-            points: 10,
-            note: "Referral points",
-        })
-        await PointTransaction.create({
-            user: result.referrer,
-            type: "EARN",
-            source: "REFERRAL",
-            referral: result._id,
-            points: 10,
-            note: "Referral points",
-        })
+  console.log("--------------------------------------------------");
+  console.log("🔍 Starting Referral Bonus Check");
 
-        await User.findByIdAndUpdate(
-            result.referrer,
-            { $inc: { points: 10 } },
-            { new: true }
+  const existingSubscriptionsCount = await Subscription.countDocuments({
+    user: userId,
+  });
+
+  console.log("📊 Total Subscriptions For User:", existingSubscriptionsCount);
+
+  const userDoc = await User.findById(userId);
+
+  console.log("👤 User Found:", !!userDoc);
+  console.log("👤 User Role:", userDoc?.role);
+  console.log("👤 Referred By:", userDoc?.referredInfo?.referredBy);
+  console.log("👑 Referred UserId (ObjectId):", userDoc?.referredInfo?.referredUserId);
+
+  if (
+    existingSubscriptionsCount === 1 &&
+    userDoc?.referredInfo?.referredUserId && // ✅ Use ObjectId now
+    userDoc.role === "USER"
+  ) {
+
+    console.log("✅ Referral Conditions Matched");
+
+    const referrerId = userDoc.referredInfo.referredUserId; // ObjectId
+    console.log("👑 Referrer ID:", referrerId);
+
+    const alreadyGiven = await User.findOne({
+      _id: referrerId,
+      referralBonusGivenFor: userId
+    });
+
+    console.log("🔎 Referral Bonus Already Given?:", !!alreadyGiven);
+
+    if (!alreadyGiven) {
+
+      const subscriptionPrice = subscriptionData.price || 0;
+      console.log("💰 Subscription Price:", subscriptionPrice);
+
+      const referralPoints = Math.round(subscriptionPrice * 0.2);
+      console.log("🎁 Calculated Referral Points (20%):", referralPoints);
+
+      if (referralPoints > 0) {
+
+        const updatedReferrer = await User.findByIdAndUpdate(
+          referrerId,
+          {
+            $inc: { points: referralPoints },
+            $push: { referralBonusGivenFor: userId }
+          },
+          { new: true }
         );
 
-        await User.findByIdAndUpdate(
-            userId,
-            { $inc: { points: 10 } },
-            { new: true }
-        );
+        console.log("💎 Referral Points Added Successfully");
+        console.log("👑 Updated Referrer Points:", updatedReferrer?.points);
 
-        await sendNotification({ userIds: [result.referrer.toString()], title: "Referral points", body: `You have earned 10 points for referring ${referredUserName}`, type: NotificationType.REFERRAL });
-        await sendNotification({ userIds: [userId.toString()], title: "Referral points", body: `You have earned 10 points for being referred by ${referrerUserName}`, type: NotificationType.REFERRAL });
-        result.completed = true;
-        await result.save();
+        await sendNotification({
+          userIds: [referrerId.toString()],
+          title: "Referral Bonus Earned 🎉",
+          body: `You earned ${referralPoints} points from your referral's subscription.`,
+          type: NotificationType.REFERRAL
+        });
+
+        console.log("📩 Referral Notification Sent");
+
+      } else {
+        console.log("⚠️ Referral Points <= 0. Bonus Skipped.");
+      }
+
+    } else {
+      console.log("⚠️ Referral Bonus Already Given Previously.");
     }
-    console.log("✅ User subscription updated in profile");
 
+  } else {
+    console.log("❌ Referral Conditions NOT Matched");
+    console.log({
+      isFirstSubscription: existingSubscriptionsCount === 1,
+      hasReferrer: !!userDoc?.referredInfo?.referredUserId,
+      isUserRole: userDoc?.role === "USER"
+    });
+  }
 
-    await sendNotification({
-        userIds: [userId.toString()],
-        title: "Welcome to the app",
-        body: "You have successfully subscribed to our app. We are excited to have you on board!",
-        type: NotificationType.WELCOME
-    })
-    return subscription;
+  console.log("🔚 Referral Bonus Check Finished");
+  console.log("--------------------------------------------------");
+
+  // ======================================================
+
+  // 🎉 Welcome notification
+  await sendNotification({
+    userIds: [userId.toString()],
+    title: "Welcome to the app",
+    body: "You have successfully subscribed to our app. We are excited to have you on board!",
+    type: NotificationType.WELCOME
+  });
+
+  console.log("📩 Welcome Notification Sent");
+
+  console.log("==================================================");
+  console.log("✅ Subscription Activation Process Completed");
+  console.log("==================================================");
+
+  return subscription;
 };
+
 
 
 

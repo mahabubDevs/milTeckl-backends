@@ -48,7 +48,13 @@ const sellSchema = new Schema({
   merchantId: { type: Types.ObjectId, ref: "User", required: true },
   userId: { type: Types.ObjectId, ref: "User", required: true },
   digitalCardId: { type: Types.ObjectId, ref: "DigitalCardPromotin", required: true },
-  promotionId: { type: Types.ObjectId, ref: "PromotionMercent", required: false },
+  promotionIds: [
+  {
+    type: Types.ObjectId,
+    ref: "PromotionMercent",
+  }
+],
+
   totalBill: { type: Number, required: true },
   discountedBill: { type: Number, required: true },
   pointsEarned: { type: Number, required: true },
