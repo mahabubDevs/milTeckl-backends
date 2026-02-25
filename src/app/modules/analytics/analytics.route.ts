@@ -2,12 +2,13 @@ import express from "express";
 import auth from "../../middlewares/auth";
 import { USER_ROLES } from "../../../enums/user";
 import { AnalyticsController } from "./analytics.controller";
+import { canAccessMerchantProfile } from "../../middlewares/accessMerchentProfile";
 
 const router = express.Router();
 
 router.get(
   "/business-customer",
-  auth(USER_ROLES.MERCENT),
+  auth(),canAccessMerchantProfile,
   AnalyticsController.getBusinessCustomerAnalytics
 );
 
@@ -21,7 +22,7 @@ router.get(
 
 router.get(
   "/merchant",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN ,USER_ROLES.VIEW_ADMIN,USER_ROLES.ADMIN_REP),
   AnalyticsController.getMerchantAnalytics
 );
 
@@ -42,7 +43,7 @@ router.get(
 
 router.get(
   "/customer",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN ,USER_ROLES.VIEW_ADMIN,USER_ROLES.ADMIN_REP),
   AnalyticsController.getCustomerAnalytics
 );
 
@@ -58,12 +59,12 @@ router.get(
   AnalyticsController.exportCustomerMonthlyData
 );
 
-router.get("/accountings/point-redeemed", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getPointRedeemedAnalytics)
+router.get("/accountings/point-redeemed", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,USER_ROLES.VIEW_ADMIN), AnalyticsController.getPointRedeemedAnalytics)
 router.get("/accountings/point-redeemed/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportPointRedeemedAnalytics)
 router.get("/accountings/revenue-per-user", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getRevenuePerUser)
 router.get("/accountings/revenue-per-user/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportRevenuePerUser)
-router.get("/accountings/cash-collection", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getCashCollectionAnalytics)
+router.get("/accountings/cash-collection", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,USER_ROLES.VIEW_ADMIN), AnalyticsController.getCashCollectionAnalytics)
 router.get("/accountings/cash-collection/export", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.exportCashCollectionAnalytics)
-router.get("/accountings/cash-receivable", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), AnalyticsController.getCashReceivableAnalytics)
+router.get("/accountings/cash-receivable", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,USER_ROLES.VIEW_ADMIN), AnalyticsController.getCashReceivableAnalytics)
 router.get("/accountings/cash-receivable/export", AnalyticsController.exportCashReceivableAnalytics)
 export const AnalyticsRoutes = router;

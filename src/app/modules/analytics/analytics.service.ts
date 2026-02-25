@@ -7,6 +7,7 @@ import { Subscription } from "../subscription/subscription.model";
 import { Response } from "express";
 import { SalesRep } from "../salesRep/salesRep.model";
 import { AnalyticsQueryOptions } from "./analytics.interface";
+import { User } from "../user/user.model";
 
 const monthNames = [
   "Jan",
@@ -35,11 +36,29 @@ const getBusinessCustomerAnalytics = async (
   endDate?: string,
   page = 1,
   limit = 10,
-  filters?: AnalyticsFilters
+  filters?: AnalyticsFilters,
+  role?: string,
+  isSubMerchant?: boolean,
+  mainMerchantId?: string
 ) => {
+  console.log("====== Business Customer Analytics Called ======");
+  console.log("Original Merchant ID:", merchantId);
+  console.log("Role:", role);
+  console.log("Date Range:", { startDate, endDate });
+  console.log("Pagination:", { page, limit });
+  console.log("Filters:", filters);
+
+  // VIEW_MERCENT হলে main merchant ID ব্যবহার করো
+  const effectiveMerchantId =
+    role === "VIEW_MERCENT" && isSubMerchant && mainMerchantId
+      ? mainMerchantId
+      : merchantId;
+
+  console.log("Effective Merchant ID used in aggregation:", effectiveMerchantId);
+
   /* ---------------- Base Match ---------------- */
   const matchSell: Record<string, any> = {
-    merchantId: new mongoose.Types.ObjectId(merchantId),
+    merchantId: new mongoose.Types.ObjectId(effectiveMerchantId),
     status: "completed",
   };
 
@@ -56,19 +75,11 @@ const getBusinessCustomerAnalytics = async (
   if (filters?.subscriptionStatus) {
     matchCustomer["customer.subscription"] = filters.subscriptionStatus;
   }
-
   if (filters?.customerName) {
-    matchCustomer["customer.firstName"] = {
-      $regex: filters.customerName,
-      $options: "i",
-    };
+    matchCustomer["customer.firstName"] = { $regex: filters.customerName, $options: "i" };
   }
-
   if (filters?.location) {
-    matchCustomer["customer.address"] = {
-      $regex: filters.location,
-      $options: "i",
-    };
+    matchCustomer["customer.address"] = { $regex: filters.location, $options: "i" };
   }
 
   const customerMatchStage: PipelineStage[] = Object.keys(matchCustomer).length
@@ -80,14 +91,7 @@ const getBusinessCustomerAnalytics = async (
   /* ---------------- Records ---------------- */
   const recordsPipeline: PipelineStage[] = [
     { $match: matchSell },
-    {
-      $lookup: {
-        from: "users",
-        localField: "userId",
-        foreignField: "_id",
-        as: "customer",
-      },
-    },
+    { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "customer" } },
     { $unwind: "$customer" },
     ...customerMatchStage,
     {
@@ -108,50 +112,33 @@ const getBusinessCustomerAnalytics = async (
     { $limit: limit },
   ];
 
-  const records = await Sell.aggregate(recordsPipeline);
+  const records: any[] = await Sell.aggregate(recordsPipeline);
+  console.log("Records Fetched:", records.length);
 
   /* ---------------- Pagination Count ---------------- */
-  const totalAgg = await Sell.aggregate<{
-    total: number;
-  }>([
+  const totalAgg = await Sell.aggregate<{ total: number }>([
     { $match: matchSell },
-    {
-      $lookup: {
-        from: "users",
-        localField: "userId",
-        foreignField: "_id",
-        as: "customer",
-      },
-    },
+    { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "customer" } },
     { $unwind: "$customer" },
     ...customerMatchStage,
     { $count: "total" },
   ]);
-
   const total = totalAgg[0]?.total ?? 0;
+  console.log("Total Records Count:", total);
 
   /* ---------------- Monthly Aggregation ---------------- */
   const rawMonthly = await Sell.aggregate([
     { $match: matchSell },
-    {
-      $lookup: {
-        from: "users",
-        localField: "userId",
-        foreignField: "_id",
-        as: "customer",
-      },
-    },
+    { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "customer" } },
     { $unwind: "$customer" },
     ...customerMatchStage,
     {
       $group: {
-        _id: {
-          year: { $year: "$createdAt" },
-          month: { $month: "$createdAt" },
-        },
+        _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
         totalRevenue: { $sum: "$discountedBill" },
         totalPointsAccumulated: { $sum: "$pointsEarned" },
         totalPointsRedeemed: { $sum: "$pointRedeemed" },
+        totalUsers: { $sum: 1 }, // প্রতিটি মাসে মোট sell records
       },
     },
     {
@@ -159,56 +146,67 @@ const getBusinessCustomerAnalytics = async (
         _id: 0,
         year: "$_id.year",
         month: "$_id.month",
-        monthName: {
-          $arrayElemAt: [monthNames, { $subtract: ["$_id.month", 1] }],
-        },
+        monthName: { $arrayElemAt: [monthNames, { $subtract: ["$_id.month", 1] }] },
         totalRevenue: 1,
         totalPointsAccumulated: 1,
         totalPointsRedeemed: 1,
+        totalUsers: 1,
       },
     },
     { $sort: { year: 1, month: 1 } },
   ]);
+  console.log("Raw Monthly Aggregation Count:", rawMonthly.length);
 
   /* ---------------- Fill Missing Months ---------------- */
-  const monthMap = new Map(rawMonthly.map((m) => [`${m.year}-${m.month}`, m]));
-
+  const monthMap = new Map(rawMonthly.map((m: any) => [`${m.year}-${m.month}`, m]));
   const filledMonthlyData: any[] = [];
-  const cursor = new Date(startDate as string);
-  const end = new Date(endDate as string);
 
-  cursor.setDate(1);
+  if (startDate && endDate) {
+    const cursor = new Date(startDate);
+    const end = new Date(endDate);
+    cursor.setDate(1);
+    while (cursor <= end) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth() + 1;
+      const data = monthMap.get(`${year}-${month}`);
 
-  while (cursor <= end) {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth() + 1;
-    const data = monthMap.get(`${year}-${month}`);
+      filledMonthlyData.push({
+        year,
+        month,
+        monthName: monthNames[month - 1],
+        totalRevenue: data?.totalRevenue || 0,
+        totalPointsAccumulated: data?.totalPointsAccumulated || 0,
+        totalPointsRedeemed: data?.totalPointsRedeemed || 0,
+        totalUsers: data?.totalUsers || 0, // 🆕 monthly total users
+      });
 
-    filledMonthlyData.push({
-      year,
-      month,
-      monthName: monthNames[month - 1],
-      totalRevenue: data?.totalRevenue || 0,
-      totalPointsAccumulated: data?.totalPointsAccumulated || 0,
-      totalPointsRedeemed: data?.totalPointsRedeemed || 0,
-    });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  }
+  console.log("Filled Monthly Data Count:", filledMonthlyData.length);
 
-    cursor.setMonth(cursor.getMonth() + 1);
+  /* ---------------- ROLE BASED REVENUE HIDING ---------------- */
+  const hideRevenueRoles = ["VIEW_MERCHANT", "VIEW_MERCENT"];
+  if (hideRevenueRoles.includes(role as string)) {
+    console.log("Role requires revenue hiding → removing revenue fields");
+
+    records.forEach((item) => delete item.revenue);
+    filledMonthlyData.forEach((item) => delete item.totalRevenue);
+  } else {
+    console.log("Revenue fields are visible for this role");
   }
 
+  console.log("====== Analytics Process Completed ======");
+
   return {
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPage: Math.ceil(total / limit),
-    },
-    data: {
-      records,
-      monthlyData: filledMonthlyData,
-    },
+    pagination: { page, limit, total, totalPage: Math.ceil(total / limit) },
+    data: { records, monthlyData: filledMonthlyData },
   };
 };
+
+
+
+
 
 
 const exportBusinessCustomerAnalytics = async (
@@ -329,17 +327,26 @@ const getMerchantAnalytics = async (
   endDate?: string,
   page: number = 1,
   limit: number = 10,
-  filters?: AnalyticsFilters
+  filters?: AnalyticsFilters,
+  userRole?: string // Pass user's role here
 ) => {
+  console.log("===== getMerchantAnalytics called =====");
+  console.log("Start Date:", startDate, "End Date:", endDate);
+  console.log("Page:", page, "Limit:", limit);
+  console.log("Filters:", filters);
+  console.log("User Role:", userRole);
+
+  const hideRevenue = userRole === "VIEW_ADMIN";
+
   /* ---------------- Base Match ---------------- */
   const matchSell: Record<string, any> = { status: "completed" };
-
   if (startDate && endDate) {
     matchSell.createdAt = {
       $gte: new Date(startDate),
       $lte: new Date(endDate),
     };
   }
+  console.log("matchSell:", matchSell);
 
   /* ---------------- Merchant Filters ---------------- */
   const matchMerchant: Record<string, any> = {};
@@ -358,6 +365,7 @@ const getMerchantAnalytics = async (
       $options: "i",
     };
   }
+  console.log("matchMerchant:", matchMerchant);
 
   const merchantMatchStage: PipelineStage[] = Object.keys(matchMerchant).length
     ? [{ $match: matchMerchant }]
@@ -397,7 +405,17 @@ const getMerchantAnalytics = async (
     { $limit: limit },
   ];
 
-  const records = await Sell.aggregate(recordsPipeline);
+  let records = await Sell.aggregate(recordsPipeline);
+  console.log("Records before role masking:", records);
+
+  // Mask revenue for VIEW_ADMIN
+  if (hideRevenue) {
+    records = records.map((r) => ({
+      ...r,
+      totalRevenue: 0,
+    }));
+    console.log("Records after VIEW_ADMIN masking:", records);
+  }
 
   /* ---------------- Pagination Count ---------------- */
   const totalAgg = await Sell.aggregate([
@@ -415,8 +433,8 @@ const getMerchantAnalytics = async (
     { $group: { _id: "$merchantId" } },
     { $count: "total" },
   ]);
-
   const total = totalAgg[0]?.total ?? 0;
+  console.log("Total records:", total);
 
   /* ---------------- Monthly Aggregation ---------------- */
   const rawMonthly = await Sell.aggregate([
@@ -454,6 +472,7 @@ const getMerchantAnalytics = async (
     },
     { $sort: { year: 1, month: 1 } },
   ]);
+  console.log("Raw monthly data:", rawMonthly);
 
   /* ---------------- Fill Missing Months ---------------- */
   const monthMap = new Map(rawMonthly.map((m) => [`${m.year}-${m.month}`, m]));
@@ -471,13 +490,17 @@ const getMerchantAnalytics = async (
       year,
       month,
       monthName: monthNames[month - 1],
-      totalRevenue: data?.totalRevenue || 0,
+      totalRevenue: hideRevenue ? 0 : data?.totalRevenue || 0,
       pointsRedeemed: data?.pointsRedeemed || 0,
       usersCount: data?.usersCount || 0,
     });
 
     cursor.setMonth(cursor.getMonth() + 1);
   }
+  console.log("Filled monthly data:", filledMonthlyData);
+
+  console.log("====== Analytics Process Completed ======");
+
   return {
     pagination: {
       page,
@@ -492,6 +515,9 @@ const getMerchantAnalytics = async (
   };
 };
 
+
+
+
 interface AnalyticsFilters {
   subscriptionStatus?: string;
   customerName?: string;
@@ -503,22 +529,32 @@ const getCustomerAnalytics = async (
   endDate?: string,
   page: number = 1,
   limit: number = 10,
-  filters?: AnalyticsFilters
+  filters?: AnalyticsFilters,
+  userRole?: string
 ) => {
+  const hideSensitive = userRole === "VIEW_ADMIN";
+
+  const start = startDate ? new Date(startDate) : new Date("2000-01-01");
+  const end = endDate ? new Date(endDate) : new Date();
+  start.setDate(1);
+  end.setDate(1);
+
+  /* ---------------- Base Match for Sell ---------------- */
   const matchSell: Record<string, any> = { status: "completed" };
   if (startDate && endDate) {
     matchSell.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
   }
 
+  /* ---------------- Customer Filters ---------------- */
   const matchCustomer: Record<string, any> = {};
   if (filters?.subscriptionStatus) matchCustomer["customer.subscription"] = filters.subscriptionStatus;
   if (filters?.customerName) matchCustomer["customer.firstName"] = { $regex: filters.customerName, $options: "i" };
   if (filters?.location) matchCustomer["customer.address"] = { $regex: filters.location, $options: "i" };
 
   const customerMatchStage: PipelineStage[] = Object.keys(matchCustomer).length ? [{ $match: matchCustomer }] : [];
-
   const skip = (page - 1) * limit;
 
+  /* ---------------- Records Pipeline ---------------- */
   const recordsPipeline: PipelineStage[] = [
     { $match: matchSell },
     { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "customer" } },
@@ -534,13 +570,12 @@ const getCustomerAnalytics = async (
         subscriptionStatus: "$customer.subscription",
         date: "$createdAt",
         pointsAccumulated: "$pointsEarned",
-        pointsRedeemed: "$pointRedeemed",
+        pointsRedeemed: { $cond: [hideSensitive, 0, "$pointRedeemed"] },
       },
     },
     { $sort: { date: -1 } },
   ];
 
-  // ---------------- Safe skip/limit ----------------
   if (limit && limit > 0) {
     if (skip > 0) recordsPipeline.push({ $skip: skip });
     recordsPipeline.push({ $limit: limit });
@@ -557,11 +592,10 @@ const getCustomerAnalytics = async (
     { $group: { _id: "$userId" } },
     { $count: "total" },
   ]);
-
   const total = totalAgg[0]?.total ?? 0;
 
-  /* ---------------- Monthly Aggregation ---------------- */
-  const rawMonthly = await Sell.aggregate([
+  /* ---------------- Monthly Aggregations ---------------- */
+  const sellMonthly = await Sell.aggregate([
     { $match: matchSell },
     { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "customer" } },
     { $unwind: "$customer" },
@@ -580,30 +614,61 @@ const getCustomerAnalytics = async (
         month: "$_id.month",
         monthName: { $arrayElemAt: [monthNames, { $subtract: ["$_id.month", 1] }] },
         pointsAccumulated: 1,
-        pointsRedeemed: 1,
+        pointsRedeemed: { $cond: [hideSensitive, 0, "$pointsRedeemed"] },
       },
     },
-    { $sort: { year: 1, month: 1 } },
   ]);
 
-  // ---------------- Fill Missing Months ----------------
-  const monthMap = new Map(rawMonthly.map((m) => [`${m.year}-${m.month}`, m]));
+  const userMonthly = await User.aggregate([
+    { $match: { createdAt: { $gte: start, $lte: end } } },
+    {
+      $group: {
+        _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+        users: { $sum: 1 }, // নাম changed from signupCount -> users
+      },
+    },
+    { $project: { _id: 0, year: "$_id.year", month: "$_id.month", users: 1 } },
+  ]);
+
+  const subscriptionMonthly = await Subscription.aggregate([
+    { $match: { createdAt: { $gte: start, $lte: end }, status: "active" } },
+    {
+      $group: {
+        _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+        revenue: { $sum: "$price" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        year: "$_id.year",
+        month: "$_id.month",
+        revenue: { $cond: [hideSensitive, 0, "$revenue"] },
+      },
+    },
+  ]);
+
+  /* ---------------- Merge Monthly Data ---------------- */
+  const sellMap = new Map(sellMonthly.map(m => [`${m.year}-${m.month}`, m]));
+  const userMap = new Map(userMonthly.map(m => [`${m.year}-${m.month}`, m]));
+  const subscriptionMap = new Map(subscriptionMonthly.map(m => [`${m.year}-${m.month}`, m]));
+
   const filledMonthlyData: any[] = [];
-  const cursor = new Date(startDate as string);
-  const end = new Date(endDate as string);
-  cursor.setDate(1);
+  const cursor = new Date(start);
 
   while (cursor <= end) {
     const year = cursor.getFullYear();
     const month = cursor.getMonth() + 1;
-    const data = monthMap.get(`${year}-${month}`);
+    const key = `${year}-${month}`;
 
     filledMonthlyData.push({
       year,
       month,
       monthName: monthNames[month - 1],
-      pointsAccumulated: data?.pointsAccumulated || 0,
-      pointsRedeemed: data?.pointsRedeemed || 0,
+      pointsAccumulated: sellMap.get(key)?.pointsAccumulated || 0,
+      pointsRedeemed: sellMap.get(key)?.pointsRedeemed || 0,
+      users: userMap.get(key)?.users || 0, // changed field name
+      revenue: subscriptionMap.get(key)?.revenue || 0,
     });
 
     cursor.setMonth(cursor.getMonth() + 1);
@@ -614,6 +679,9 @@ const getCustomerAnalytics = async (
     data: { records, monthlyData: filledMonthlyData },
   };
 };
+
+
+
 
 
 

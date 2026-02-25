@@ -9,7 +9,12 @@ import { generateExcelBuffer } from "../../../helpers/excelExport";
 // User creates report
 const getBusinessCustomerAnalytics = catchAsync(
   async (req: Request, res: Response) => {
-    const merchantId = (req.user as any)._id;
+    const user = req.user as any;
+    const merchantId = user._id;
+    const role = user.role;
+    const isSubMerchant = user.isSubMerchant; // check if VIEW_MERCENT
+    const mainMerchantId = user.merchantId?.toString(); // root merchant id
+
     const {
       startDate,
       endDate,
@@ -20,6 +25,7 @@ const getBusinessCustomerAnalytics = catchAsync(
       location,
     } = req.query;
 
+    // Call service with effective merchant logic
     const result = await AnalyticsService.getBusinessCustomerAnalytics(
       merchantId,
       startDate as string,
@@ -30,7 +36,10 @@ const getBusinessCustomerAnalytics = catchAsync(
         subscriptionStatus: subscriptionStatus as string,
         customerName: customerName as string,
         location: location as string,
-      }
+      },
+      role,
+      isSubMerchant,
+      mainMerchantId
     );
 
     sendResponse(res, {
@@ -42,6 +51,7 @@ const getBusinessCustomerAnalytics = catchAsync(
     });
   }
 );
+
 
 
 const exportBusinessCustomerAnalytics = catchAsync(
@@ -95,6 +105,10 @@ const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
     location,
   } = req.query;
 
+  // Get the logged-in user's role from req.user
+  const userRole = (req.user as any)?.role; // Make sure your auth middleware sets req.user
+  console.log("Controller - User Role:", userRole);
+
   const result = await AnalyticsService.getMerchantAnalytics(
     startDate as string,
     endDate as string,
@@ -104,7 +118,21 @@ const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
       subscriptionStatus: subscriptionStatus as string,
       merchantName: merchantName as string,
       location: location as string,
-    }
+    },
+    userRole // Pass role to service
+  );
+
+  console.log(
+    "Records Fetched:",
+    result.data.records.length,
+    "Total Records Count:",
+    result.pagination.total
+  );
+  console.log(
+    "Monthly Data Count:",
+    result.data.monthlyData.length,
+    "Revenue fields are masked for VIEW_ADMIN:",
+    userRole === "VIEW_ADMIN"
   );
 
   sendResponse(res, {
@@ -127,6 +155,10 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
     location,
   } = req.query;
 
+  // Get logged-in user role
+  const userRole = (req.user as any)?.role;
+  console.log("Controller - User Role:", userRole);
+
   const result = await AnalyticsService.getCustomerAnalytics(
     startDate as string,
     endDate as string,
@@ -136,7 +168,21 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
       subscriptionStatus: subscriptionStatus as string,
       customerName: customerName as string,
       location: location as string,
-    }
+    },
+    userRole // pass role
+  );
+
+  console.log(
+    "Records Fetched:",
+    result.data.records.length,
+    "Total Records Count:",
+    result.pagination.total
+  );
+  console.log(
+    "Monthly Data Count:",
+    result.data.monthlyData.length,
+    "Sensitive fields masked:",
+    userRole === "VIEW_ADMIN"
   );
 
   sendResponse(res, {
@@ -147,6 +193,7 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
     pagination: result.pagination,
   });
 });
+
 
 
 const exportCustomerAnalytics = catchAsync(
