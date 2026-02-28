@@ -79,8 +79,12 @@ const getBusinessCustomerAnalytics = async (
     matchCustomer["customer.firstName"] = { $regex: filters.customerName, $options: "i" };
   }
   if (filters?.location) {
-    matchCustomer["customer.address"] = { $regex: filters.location, $options: "i" };
+    const parts = filters.location.split(",").map(p => p.trim());
+    matchCustomer["customer.address"] = {
+      $all: parts.map(part => new RegExp(part.replace(/\+/g, "\\+"), "i"))
+    };
   }
+
 
   const customerMatchStage: PipelineStage[] = Object.keys(matchCustomer).length
     ? [{ $match: matchCustomer }]

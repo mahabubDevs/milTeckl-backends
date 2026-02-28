@@ -36,7 +36,7 @@ router.patch(
 )
 router.patch(
   "/:id/deactivate-account",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.ADMIN_SELL, USER_ROLES.ADMIN_REP),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,  USER_ROLES.ADMIN_REP),
   SalesRepController.deactivateAccount
 )
 router.post(

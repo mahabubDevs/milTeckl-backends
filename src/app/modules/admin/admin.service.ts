@@ -431,6 +431,26 @@ const deleteMerchant = async (id: string) => {
     console.log("No FCM token found, skipping notification");
   }
 
+      // 2️⃣ Save DB Notification for Super Admin(s)
+
+
+        // 🔎 Find Super Admin(s)
+  const superAdmins = await User.find({
+    role: USER_ROLES.SUPER_ADMIN,
+  }).select("_id fcmToken");
+
+  if (!superAdmins.length) {
+    console.log("No Super Admin found");
+  }
+
+  await sendNotification({
+    userIds: superAdmins.map((admin) => admin._id),
+    title: `Merchant ${merchant.firstName} (${merchant.email}) has been deleted by Admin.`,
+    body: `Merchant ${merchant.firstName} (${merchant.email}) has been deleted by Admin.`,
+    type: NotificationType.MANUAL,
+  });
+
+
   // 2️⃣ Delete merchant
   const deleted = await User.findByIdAndDelete(id);
   console.log("Merchant deleted from DB:", deleted?._id);
@@ -516,6 +536,23 @@ if (merchant.fcmToken) {
       type: NotificationType.WELCOME,
     })
   }
+
+  const superAdmins = await User.find({
+    role: USER_ROLES.SUPER_ADMIN,
+  }).select("_id fcmToken");
+
+  if (!superAdmins.length) {
+    console.log("No Super Admin found");
+  }
+
+  await sendNotification({
+    userIds: superAdmins.map((admin) => admin._id),
+    title: `Merchant ${merchant.firstName} (${merchant.email}) has been approved.`,
+    body: `Merchant ${merchant.firstName} (${merchant.email}) has been approved by Admin.`,
+    type: NotificationType.MANUAL,
+  });
+
+
 
   return result;
 };

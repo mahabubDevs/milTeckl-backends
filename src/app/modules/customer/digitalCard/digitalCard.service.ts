@@ -503,13 +503,26 @@ const getMerchantDigitalCardWithPromotions = async (
   console.log("📌 Total valid promotions:", validPromotions.length);
 
   if (validPromotions.length === 0) {
-    console.log(
-      "❌ ERROR: No valid promotions found for DigitalCard:",
-      digitalCard.cardCode
-    );
+  console.log("⚠️ No active promotions found");
+
+  // যদি promoCode দিয়ে search করা হয় → null return করবে
+  if (searchedByPromoCode) {
+    console.log("❌ ERROR: promoCode দেওয়া হয়েছে কিন্তু valid না");
     console.log("=================================================");
     return null;
   }
+
+    // যদি cardCode দিয়ে search করা হয় → card return করবে
+    console.log("✅ Returning card without promotions");
+    
+    return {
+      digitalCard: {
+        ...digitalCard.toObject(),
+        promotions: [],
+      },
+    };
+  }
+
 
   /* ------------------------------------------------
      5️⃣ Final response

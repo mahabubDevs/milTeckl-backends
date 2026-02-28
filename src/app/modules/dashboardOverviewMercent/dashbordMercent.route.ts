@@ -34,7 +34,7 @@ router.get(
 );
 router.get(
   "/customer-chart-week",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   DashboardMercentController.getCustomerChartWeek
 );
 

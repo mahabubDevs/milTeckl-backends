@@ -490,15 +490,19 @@ const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Respons
     console.log(`Promotion "${p.name}" | Merchant: ${p.merchantId} | Promo Segment: ${p.customerSegment}`);
   });
 
-  // 2️⃣ Merchant-wise segment filtering
+  // 2️⃣ Bulk fetch MerchantCustomer segments
+  const merchantIds = Array.from(new Set(allMerchantPromotions.map(p => p.merchantId)));
+  const customerRecords = await MerchantCustomer.find({
+    merchantId: { $in: merchantIds },
+    customerId: userId,
+  }).select("merchantId segment");
+
+  const merchantSegmentMap = new Map(customerRecords.map(c => [c.merchantId.toString(), c.segment]));
+
+  // 3️⃣ Merchant-wise segment filtering
   const merchantPromotions: any[] = [];
   for (const promo of allMerchantPromotions) {
-    const customer = await MerchantCustomer.findOne({
-      merchantId: promo.merchantId,
-      customerId: userId,
-    }).select("segment");
-
-    const userSegment = customer?.segment || "new_customer";
+    const userSegment = merchantSegmentMap.get(promo.merchantId.toString()) || "new_customer";
 
     console.log(
       `Checking promotion "${promo.name}" | Merchant: ${promo.merchantId} | ` +
@@ -515,37 +519,39 @@ const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Respons
 
   console.log("🔹 Merchant promotions after segment filter:", merchantPromotions.length);
 
-  // 3️⃣ Fetch all active admin promotions
+  // 4️⃣ Fetch all active admin promotions
   let adminPromotions = await PromotionAdmin.find({ status: "active" }).lean();
   adminPromotions = adminPromotions.map(p => ({ ...p, source: "admin" }));
   console.log("🔹 Admin promotions fetched:", adminPromotions.length);
 
-  // 4️⃣ Deduplicate admin promotions
-  const merchantIds = new Set(merchantPromotions.map(p => p._id.toString()));
-  adminPromotions = adminPromotions.filter(p => !merchantIds.has(p._id.toString()));
+  // 5️⃣ Deduplicate admin promotions
+  const merchantPromoIds = new Set(merchantPromotions.map(p => p._id.toString()));
+  adminPromotions = adminPromotions.filter(p => !merchantPromoIds.has(p._id.toString()));
   console.log("🔹 Admin promotions after dedup:", adminPromotions.length);
 
-  // 5️⃣ Combine merchant + admin promotions
+  // 6️⃣ Combine merchant + admin promotions
   let promotions = [...merchantPromotions, ...adminPromotions];
   console.log("🔹 Total combined promotions before date/day/userCard filter:", promotions.length);
 
-  // 6️⃣ Filter by date/day/userCard, but always include all_customer
+  // 7️⃣ Filter by date/day/userCard
   const digitalCards = await DigitalCard.find({ userId }).select("promotions");
-  const existingPromotionIds = digitalCards.flatMap(card =>
-    card.promotions.map(p => p.promotionId?.toString()).filter(Boolean)
+  const existingPromotionIds = new Set(
+    digitalCards.flatMap(card =>
+      card.promotions.map(p => p.promotionId?.toString()).filter(Boolean)
+    )
   );
 
   promotions = promotions.filter(promo => {
     const isAllCustomer = promo.customerSegment === "all_customer";
 
-    if (isAllCustomer) return true; // ✅ all_customer always included
+    if (isAllCustomer) return true; // ✅ always include
 
     const startDate = new Date(promo.startDate);
     const endDate = new Date(promo.endDate);
     const days = promo.availableDays || [];
     const isValidDate = today >= startDate && today <= endDate;
     const isValidDay = days.includes("all") || days.includes(todayDay);
-    const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
+    const isNotInUserCard = !existingPromotionIds.has(promo._id.toString());
 
     console.log(
       `Filtering promo "${promo.name}" | Segment: ${promo.customerSegment} | ` +
@@ -558,12 +564,12 @@ const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Respons
 
   console.log("🔹 Promotions after date/day/userCard filter:", promotions.length);
 
-  // 7️⃣ Log final promotions
+  // 8️⃣ Log final promotions
   promotions.forEach(p => {
     console.log(`✅ Final Promotion "${p.name}" | Merchant: ${p.merchantId} | Promo Segment: ${p.customerSegment} | User Segment: ${p.userSegment || 'N/A'}`);
   });
 
-  // 8️⃣ Attach rating info
+  // 9️⃣ Attach rating info
   const promotionIds = promotions.map(p => p._id);
   const ratingsAgg = await Rating.aggregate([
     { $match: { promotionId: { $in: promotionIds } } },
@@ -592,14 +598,14 @@ const getCombinePromotionsForUser = catchAsync(async (req: Request, res: Respons
     };
   });
 
-  // 9️⃣ Sort by createdAt descending
+  // 🔟 Sort by createdAt descending
   promotions.sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   console.log("🔹 Total promotions sent to user:", promotions.length);
 
-  // 10️⃣ Send response
+  // 1️⃣1️⃣ Send response
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,

@@ -3,6 +3,7 @@ import auth from "../../middlewares/auth";
 import { USER_ROLES } from "../../../enums/user";
 import { AnalyticsController } from "./analytics.controller";
 import { canAccessMerchantProfile } from "../../middlewares/accessMerchentProfile";
+import { encryptResponse } from "../../middlewares/encryptResponse";
 
 const router = express.Router();
 

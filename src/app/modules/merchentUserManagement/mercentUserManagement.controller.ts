@@ -64,14 +64,24 @@ const updateUser = catchAsync(async (req: any, res: Response) => {
 
 
 // ---------------- Delete User ----------------
- const deleteUser = catchAsync(async (req: any, res: Response) => {
+const deleteUser = catchAsync(async (req: any, res: Response) => {
+  console.log("===== deleteUser CONTROLLER START =====");
+  console.log("Params:", req.params);
+  console.log("Logged in user:", req.user);
+
   await UserService.deleteUser(req.params.id, req.user);
+
+  console.log("Sending success response");
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
     message: "User deleted successfully",
   });
+
+  console.log("===== deleteUser CONTROLLER END =====");
 });
+
+
 
 // ---------------- Toggle Status ----------------
  const toggleUserStatus = catchAsync(async (req: any, res: Response) => {

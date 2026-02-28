@@ -158,23 +158,44 @@ const getCustomerChart = catchAsync(async (req, res) => {
 
 
 const getCustomerChartWeek = catchAsync(async (req, res) => {
-  const merchantId = (req.user as any)._id;
+  try {
+    const user = req.user as any;
 
-  const { startDate, endDate } = req.query;
+    // ✅ Same filtering logic as weekly report
+    const filterId = user?.isSubMerchant ? user.merchantId : user._id;
 
-  const result = await DashboardMercentService.getCustomerChartWeek(
-    merchantId,
-    startDate as string,
-    endDate as string
-  );
+    if (!filterId || !Types.ObjectId.isValid(filterId)) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized merchant",
+      });
+    }
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Customer chart data fetched successfully",
-    data: result,
-  });
+    const merchantId = filterId;
+
+    const { startDate, endDate } = req.query;
+
+    const result = await DashboardMercentService.getCustomerChartWeek(
+      merchantId,
+      startDate as string,
+      endDate as string
+    );
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Customer chart data fetched successfully",
+      data: result,
+    });
+  } catch (error) {
+    console.error("❌ Error in getCustomerChartWeek:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
 });
+
 
 export const DashboardMercentController = {
   getTotalRevenue,

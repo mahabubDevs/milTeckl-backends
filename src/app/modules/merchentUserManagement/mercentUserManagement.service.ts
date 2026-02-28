@@ -150,14 +150,47 @@ const updateUser = async (
 };
 
 // ---------------- Delete User ----------------
- const deleteUser = async (userId: string, loggedInUser: any) => {
-  const filter: any = { _id: userId };
-  if (loggedInUser.role === USER_ROLES.MERCENT) filter.merchantId = loggedInUser.id;
+const deleteUser = async (userId: string, loggedInUser: any) => {
+  console.log("===== deleteUser START =====");
+  console.log("Requested userId to delete:", userId);
+  console.log("Logged in user:", loggedInUser);
 
+  // 1️⃣ Initialize filter
+  const filter: any = { _id: userId };
+
+  // 2️⃣ MERCENT role হলে merchantId fetch
+  let merchantId: string | null = null;
+  if (loggedInUser.role === USER_ROLES.MERCENT) {
+    const merchant = await User.findById(loggedInUser._id).select("merchantId");
+    merchantId = merchant?.merchantId?.toString() || null;
+    console.log("Fetched merchantId from DB:", merchantId);
+
+    if (!merchantId) {
+      console.warn(
+        "⚠️ MERCENT user has no merchantId, cannot delete other users safely"
+      );
+    } else {
+      filter.merchantId = merchantId;
+      console.log("Applying merchantId filter:", merchantId);
+    }
+  }
+
+  console.log("Final filter for deletion:", filter);
+
+  // 3️⃣ Delete user
   const deleted = await User.findOneAndDelete(filter);
-  if (!deleted) throw new ApiError(404, "User not found or not authorized");
+
+  if (!deleted) {
+    console.log("❌ No user found or not authorized to delete");
+    throw new ApiError(404, "User not found or not authorized");
+  }
+
+  console.log("✅ User deleted successfully:", deleted._id);
+  console.log("===== deleteUser END =====");
   return true;
 };
+
+
 
 // ---------------- Toggle Active/Inactive ----------------
 const toggleUserStatus = async (userId: string, loggedInUser: any) => {
