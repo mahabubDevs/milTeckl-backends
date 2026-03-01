@@ -18,6 +18,9 @@ const createUserToDB = async (
   payload: Partial<IUser>,
   loggedInUser: any
 ) => {
+  console.log("🚀 createUserToDB called with payload:", payload);
+  console.log("👤 Logged-in merchant:", loggedInUser);
+
   // 🔐 Only Merchant can create merchant staff
   if (loggedInUser.role !== USER_ROLES.MERCENT) {
     throw new ApiError(403, "Only merchant can create merchant users");
@@ -25,12 +28,18 @@ const createUserToDB = async (
 
   // 🔒 Ownership (সবসময় merchant-এর under)
   payload.createdBy = loggedInUser._id;
-  payload.merchantId = loggedInUser._id; // 🔴 FIXED
-  payload.isSubMerchant = true;          // 🔴 IMPORTANT FLAG
+  payload.merchantId = loggedInUser._id;
+  payload.isSubMerchant = true;
+  console.log("🔑 Ownership fields set:", {
+    createdBy: payload.createdBy,
+    merchantId: payload.merchantId,
+    isSubMerchant: payload.isSubMerchant,
+  });
 
   // 🔒 Role validation
   if (payload.role) {
     if (!ALLOWED_MERCHANT_ROLES.includes(payload.role as USER_ROLES)) {
+      console.log("❌ Invalid role provided:", payload.role);
       throw new ApiError(
         400,
         "Merchant can only create ADMIN_MERCENT or VIEW_MERCENT users"
@@ -39,28 +48,62 @@ const createUserToDB = async (
   } else {
     payload.role = USER_ROLES.VIEW_MERCENT;
   }
+  console.log("🛡 Role set:", payload.role);
 
   // 🔒 Default values
   payload.status = USER_STATUS.ACTIVE;
   payload.verified = true;
-
-  // ❌ Staff user কখনো root merchant হবে না
   payload.isRootMerchant = false;
+  console.log("⚙ Default values set:", {
+    status: payload.status,
+    verified: payload.verified,
+    isRootMerchant: payload.isRootMerchant,
+  });
 
   // ✅ Generate customUserId
   payload.customUserId = await generateCustomUserId(USER_ROLES.MERCENT);
+  console.log("🆔 Generated customUserId:", payload.customUserId);
 
   // ✅ Generate referenceId
   if (!payload.referenceId) {
     payload.referenceId = `REF-${Math.floor(10000 + Math.random() * 90000)}`;
   }
+  console.log("🔖 Reference ID:", payload.referenceId);
+
+  // 📝 Fetch merchant info from DB and auto-populate fields
+  const merchantFromDB = await User.findById(loggedInUser._id).lean();
+  if (!merchantFromDB) {
+    throw new ApiError(404, "Merchant not found in database");
+  }
+
+  const infoFields = [
+    "address",
+    "businessName",
+    "city",
+    "country",
+    "service",
+    "about",
+    "website"
+  ];
+
+  infoFields.forEach((field) => {
+    if ((merchantFromDB as any)[field] !== undefined) {
+      (payload as any)[field] = (merchantFromDB as any)[field];
+    }
+  });
+
+  console.log("🏢 Info fields populated from merchant DB:", 
+    infoFields.reduce((acc, f) => {
+      acc[f] = (payload as any)[f];
+      return acc;
+    }, {} as any)
+  );
 
   const user = await User.create(payload);
+  console.log("✅ User created:", user);
+
   return user.toObject();
 };
-
-
-
 // ---------------- Get Users By Merchant ----------------
 const getUsersByMerchant = async (loggedInUser: any, query: Record<string, any>) => {
   const creatorId = loggedInUser.id || loggedInUser._id;
