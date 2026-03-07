@@ -366,44 +366,56 @@ const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
 //catagory based promotion fetching
 const getPromotionsByUserCategory = async (categoryName: string, userId?: string) => {
   if (!categoryName) throw new Error("Category name is required");
+  console.log("Category Name:", categoryName);
 
   // 1️⃣ Find merchants by category
-  const merchants = await User.find(
-    { service: { $regex: new RegExp(categoryName, "i") } },
-    { _id: 1 }
-  );
+  const normalizedCategory = categoryName.replace(/&/g, 'and').trim();
+const merchants = await User.find(
+  { service: { $regex: new RegExp(normalizedCategory, "i") } },
+  { _id: 1 }
+);
+  console.log("Merchants found:", merchants.length);
 
   if (merchants.length === 0) return [];
 
   const merchantIds = merchants.map((m) => new Types.ObjectId(m._id));
+  console.log("Merchant IDs:", merchantIds);
 
   // 2️⃣ Find all promotions from these merchants
   let promotions = await Promotion.find({ merchantId: { $in: merchantIds } })
     .select("cardId name discountPercentage startDate endDate image status availableDays customerSegment")
     .lean();
+  console.log("Total Promotions found:", promotions.length);
 
   // 3️⃣ Today & day
   const today = new Date();
   const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   const todayDay = dayMap[today.getDay()];
+  console.log("Today:", today.toDateString(), "Day:", todayDay);
 
   if (userId) {
     // 4️⃣ Logged-in user
     const activeUser = await User.findById(userId).select("_id status");
+    console.log("Active User:", activeUser);
+
     if (!activeUser || activeUser.status !== "active") {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "User not active");
     }
 
     // 5️⃣ User segment
     const userSegment = await getUserSegment(userId);
+    console.log("User Segment:", userSegment);
 
     // 6️⃣ User's digital cards
-      const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+    const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+    console.log("Digital Cards count:", digitalCards.length);
+
     const existingPromotionIds = digitalCards.flatMap(card =>
       card.promotions
         .filter((p: any) => p.promotionId)
         .map((p: any) => p.promotionId.toString()) as string[]
     );
+    console.log("Existing Promotion IDs in user's cards:", existingPromotionIds);
 
     // 7️⃣ Filter promotions
     promotions = promotions.filter(promo => {
@@ -416,7 +428,10 @@ const getPromotionsByUserCategory = async (categoryName: string, userId?: string
       const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
       const isSegmentMatch = !promo.customerSegment || ["all_customer", userSegment].includes(promo.customerSegment);
 
-      return promo.status === "active" && isValidDate && isValidDay && isNotInUserCard && isSegmentMatch;
+      const includePromo = promo.status === "active" && isValidDate && isValidDay && isNotInUserCard && isSegmentMatch;
+      console.log(`Promo: ${promo.name}, Active: ${promo.status}, ValidDate: ${isValidDate}, ValidDay: ${isValidDay}, NotInCard: ${isNotInUserCard}, SegmentMatch: ${isSegmentMatch}, Include: ${includePromo}`);
+
+      return includePromo;
     });
 
   } else {
@@ -430,10 +445,14 @@ const getPromotionsByUserCategory = async (categoryName: string, userId?: string
       const isValidDay = days.includes("all") || days.includes(todayDay);
       const isSegmentMatch = !promo.customerSegment || promo.customerSegment === "all_customer";
 
-      return promo.status === "active" && isValidDate && isValidDay && isSegmentMatch;
+      const includePromo = promo.status === "active" && isValidDate && isValidDay && isSegmentMatch;
+      console.log(`Guest Promo: ${promo.name}, Active: ${promo.status}, ValidDate: ${isValidDate}, ValidDay: ${isValidDay}, SegmentMatch: ${isSegmentMatch}, Include: ${includePromo}`);
+
+      return includePromo;
     });
   }
 
+  console.log("Filtered Promotions Count:", promotions.length);
   return promotions;
 };
 
