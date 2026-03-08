@@ -59,7 +59,10 @@ const sellSchema = new Schema({
   discountedBill: { type: Number, required: true },
   pointsEarned: { type: Number, required: true },
   pointRedeemed: { type: Number, required: false },
-  status: { type: String, enum: ["completed", "pending","rejected"], default: "pending" },
+  status: { type: String, enum: ["completed", "pending","rejected","expired"], default: "pending" },
+  approvalExpiresAt: {
+  type: Date,
+},
 }, { timestamps: true });
 
 // ======= Post-save hook =======

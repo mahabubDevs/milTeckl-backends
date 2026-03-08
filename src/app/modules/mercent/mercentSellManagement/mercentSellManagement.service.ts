@@ -310,6 +310,12 @@ const checkout = async (
   // ===============================
   const needApproval = pointRedeemed > 0;
 
+
+  // approval expire time (2 minutes)
+const approvalExpiresAt = needApproval
+  ? new Date(Date.now() + 2 * 60 * 1000)
+  : null;
+
   // ===============================
   // 🧾 Create Sell Record
   // ===============================
@@ -337,6 +343,7 @@ const checkout = async (
     pointsEarned,
 
     status: needApproval ? "pending" : "completed",
+    approvalExpiresAt,
   });
 
   console.log("✅ Sell created:", sell._id.toString(), "Status:", sell.status);
@@ -740,7 +747,17 @@ const approvePromotion = async (
 });
 
 
+
+
   if (!sell) throw new Error("Pending checkout not found");
+
+// ⏱ Expire validation (2 minutes)
+if (sell.approvalExpiresAt && sell.approvalExpiresAt < new Date()) {
+  sell.status = "expired";
+  await sell.save();
+
+  throw new Error("Approval request expired (2 minutes)");
+}
 
   console.log("📌 Pending Sell found:", sell._id.toString());
   console.log("🔹 Sell Total Bill:", sell.totalBill);
