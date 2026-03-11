@@ -12,6 +12,7 @@ import catchAsync from "../../../../shared/catchAsync";
 import sendResponse from "../../../../shared/sendResponse";
 import ApiError from "../../../../errors/ApiErrors";
 import QueryBuilder from "../../../../util/queryBuilder";
+import { AuditService } from "../../auditLog/audit.service";
 
 const createTier = catchAsync(async (req: Request, res: Response) => {
   const validatedBody = await createTierSchema.parseAsync({
@@ -28,6 +29,16 @@ const createTier = catchAsync(async (req: Request, res: Response) => {
   };
 
   const result = await TierService.createTierToDB(payload);
+
+  // -----------------------------
+  // 3️⃣ Audit Log
+  // -----------------------------
+  await AuditService.createLog(
+    (req.user as any)?._id,
+    "CREATE_TIER",
+    `Tier "${result.name}" created`
+  );
+
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -53,6 +64,12 @@ const updateTier = catchAsync(async (req: Request, res: Response) => {
 
   const result = await TierService.updateTierToDB(req.params.id, payload);
   if (!result) throw new ApiError(StatusCodes.NOT_FOUND, "Tier not found");
+
+   await AuditService.createLog(
+    (req.user as any)?._id,
+    "UPDATE_TIER",
+    `Tier "${result.name}" updated`
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -111,6 +128,15 @@ const getSingleTier = catchAsync(async (req: Request, res: Response) => {
 const deleteTier = catchAsync(async (req: Request, res: Response) => {
   const result = await TierService.deleteTierToDB(req.params.id);
   if (!result) throw new ApiError(StatusCodes.NOT_FOUND, "Tier not found");
+
+    // -----------------------------
+  // 1️⃣ Audit Log
+  // -----------------------------
+  await AuditService.createLog(
+    (req.user as any)?._id,
+    "DELETE_TIER",
+    `Tier "${result.name}" deleted`
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,

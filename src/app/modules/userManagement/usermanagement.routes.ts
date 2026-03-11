@@ -19,7 +19,7 @@ router
 
   router
   router.route("/merchantrole").post(
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,),
   UserController.createUser
 );
 

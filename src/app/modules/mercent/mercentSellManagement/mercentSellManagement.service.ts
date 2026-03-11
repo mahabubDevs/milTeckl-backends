@@ -8,6 +8,8 @@ import { sendNotification } from "../../../../helpers/notificationsHelper";
 import { Tier } from "../point&TierSystem/tier.model";
 import { Rating } from "../../customer/rating/rating.model";
 import { subMonths } from "date-fns"; 
+import { sendPushNotification } from "../../../../helpers/sendPushNotification";
+import { User } from "../../user/user.model";
 // -----------------------------
 
 
@@ -403,6 +405,53 @@ const approvalExpiresAt = needApproval
       );
     }
   }
+
+
+
+// if (needApproval) {
+//   const io = (global as any).io;
+//   const payload = {
+//     sellId: sell._id,
+//     merchantId,
+//     digitalCardCode,
+//     totalBill,
+//     discountedBill,
+//     finalBill,
+//     pointRedeemed,
+//     promotionIds,
+//     pointsEarned,
+//     message: "Merchant requested checkout approval",
+//   };
+
+//   // 🔹 Socket.IO v4+ compatible
+//   const socketsArray = Array.from(io?.sockets?.sockets?.values() || []);
+
+//   // 🔹 Check user connected using socket.data.userId
+//   const userSockets = socketsArray.filter(
+//     (s: any) => s.data?.userId?.toString() === digitalCard.userId.toString()
+//   );
+
+//   if (userSockets.length > 0) {
+//     // Emit to all sockets of this user
+//     userSockets.forEach((s: any) => {
+//       s.emit(`getApplyRequest::${digitalCard.userId}`, payload);
+//     });
+//     console.log("💠 Approval request sent via socket:", digitalCard.userId.toString());
+//   } else {
+//     console.log("🔔 User not connected via socket. Sending push notification...");
+
+//     // Push notification logic
+//     const user = await User.findById(digitalCard.userId);
+//     if (user?.fcmToken) {
+//       sendPushNotification(
+//         user.fcmToken,
+//         "Checkout Approval Required",
+//         `You have a pending checkout approval for card ${digitalCardCode}.`
+//       );
+//       console.log("🔔 Push notification sent to user:", user._id.toString());
+//     }
+//   }
+// }
 
   console.log("=================================================");
   console.log("🚀 checkout END");

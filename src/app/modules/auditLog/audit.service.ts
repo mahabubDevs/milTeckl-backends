@@ -44,10 +44,7 @@ const getAllLogsExceptMerchant = async (query: Record<string, unknown>) => {
 
   const auditQuery = new QueryBuilder(
     AuditLog.find({
-      $or: [
-        { user: { $nin: merchantIds } },
-        { user: { $exists: false } } // ✅ important
-      ]
+      user: { $exists: false } // ✅ only admin logs
     }),
     query
   )
@@ -58,6 +55,44 @@ const getAllLogsExceptMerchant = async (query: Record<string, unknown>) => {
 
   const result = await auditQuery.modelQuery;
   const pagination = await auditQuery.getPaginationInfo();
+
+  return {
+    meta: pagination,
+    data: result,
+  };
+};
+
+
+import mongoose from "mongoose";
+
+const getAllLogsExceptMerchantTier = async (query: Record<string, unknown>) => {
+  console.log("[getAllLogsExceptMerchantTier] Incoming query:", query);
+
+  const allowedRoles = ["VIEW_ADMIN", "ADMIN_SELL", "ADMIN_REP", "SUPER_ADMIN", "ADMIN"];
+
+  const users = await User.find({ role: { $in: allowedRoles } }, { _id: 1 });
+  const userIds = users.map(u => u._id); // <-- ObjectId হিসেবে রাখা
+  console.log("[getAllLogsExceptMerchantTier] Allowed user IDs:", userIds);
+
+  const auditQuery = new QueryBuilder(
+    AuditLog.find({
+      user: { $in: userIds },
+      actionType: { $in: ["CREATE_TIER", "UPDATE_TIER", "DELETE_TIER"] },
+    }),
+    query
+  )
+    .search(["actionType", "details"])
+    .filter()
+    .sort()
+    .paginate();
+
+  console.log("[getAllLogsExceptMerchantTier] Query:", auditQuery.modelQuery.getQuery());
+
+  const result = await auditQuery.modelQuery;
+  console.log("[getAllLogsExceptMerchantTier] Query result length:", result.length);
+
+  const pagination = await auditQuery.getPaginationInfo();
+  console.log("[getAllLogsExceptMerchantTier] Pagination info:", pagination);
 
   return {
     meta: pagination,
@@ -109,5 +144,6 @@ const getLogsByUserId = async (
 export const AuditService = {
   createLog,
   getAllLogsExceptMerchant,
+  getAllLogsExceptMerchantTier,
   getLogsByUserId
 };

@@ -9,14 +9,14 @@ const router = express.Router();
 // ---------------- Create User ----------------
 router.post(
   "/create-user",
-  auth(USER_ROLES.MERCENT, USER_ROLES.ADMIN),
+  auth(USER_ROLES.MERCENT, USER_ROLES.ADMIN_MERCENT),
   MercentUserManagementController.createUser
 );
 
 // ---------------- Get All Users (merchant's own) ----------------
 router.get(
   "/users",
-  auth(USER_ROLES.MERCENT, USER_ROLES.ADMIN),
+  auth(USER_ROLES.MERCENT, USER_ROLES.ADMIN_MERCENT),
   MercentUserManagementController.getMyUsers
 );
 

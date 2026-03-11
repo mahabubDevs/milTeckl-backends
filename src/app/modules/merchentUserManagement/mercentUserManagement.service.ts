@@ -19,17 +19,25 @@ const createUserToDB = async (
   loggedInUser: any
 ) => {
   console.log("🚀 createUserToDB called with payload:", payload);
-  console.log("👤 Logged-in merchant:", loggedInUser);
+  console.log("👤 Logged-in user:", loggedInUser);
 
-  // 🔐 Only Merchant can create merchant staff
-  if (loggedInUser.role !== USER_ROLES.MERCENT) {
-    throw new ApiError(403, "Only merchant can create merchant users");
+  // 🔐 Only Merchant or Admin Merchant can create users
+  if (loggedInUser.role !== USER_ROLES.MERCENT && loggedInUser.role !== USER_ROLES.ADMIN_MERCENT) {
+    throw new ApiError(403, "Only merchant or admin merchant can create users");
   }
 
-  // 🔒 Ownership (সবসময় merchant-এর under)
+  // 🔒 Ownership (main merchant set করা)
+  if (loggedInUser.role === USER_ROLES.MERCENT) {
+    // মূল Merchant
+    payload.merchantId = loggedInUser._id;
+  } else if (loggedInUser.role === USER_ROLES.ADMIN_MERCENT) {
+    // Admin Merchant হলে, মূল Merchant কে assign
+    payload.merchantId = loggedInUser.merchantId;
+  }
+
   payload.createdBy = loggedInUser._id;
-  payload.merchantId = loggedInUser._id;
   payload.isSubMerchant = true;
+
   console.log("🔑 Ownership fields set:", {
     createdBy: payload.createdBy,
     merchantId: payload.merchantId,
@@ -71,7 +79,7 @@ const createUserToDB = async (
   console.log("🔖 Reference ID:", payload.referenceId);
 
   // 📝 Fetch merchant info from DB and auto-populate fields
-  const merchantFromDB = await User.findById(loggedInUser._id).lean();
+  const merchantFromDB = await User.findById(payload.merchantId).lean();
   if (!merchantFromDB) {
     throw new ApiError(404, "Merchant not found in database");
   }
@@ -108,30 +116,29 @@ const createUserToDB = async (
 };
 // ---------------- Get Users By Merchant ----------------
 const getUsersByMerchant = async (loggedInUser: any, query: Record<string, any>) => {
-  const creatorId = loggedInUser.id || loggedInUser._id;
+  const mainMerchantId =
+    loggedInUser.role === USER_ROLES.MERCENT
+      ? loggedInUser._id
+      : loggedInUser.merchantId; // যদি admin হয়, তার main merchant
 
-  if (!creatorId) {
+  if (!mainMerchantId) {
     throw new ApiError(400, "Invalid logged in user");
   }
 
-  // Initialize QueryBuilder with base query
+  // এখন query: merchantId = mainMerchantId
   const queryBuilder = new QueryBuilder(
-    User.find({ createdBy: creatorId }).lean(),
+    User.find({ merchantId: mainMerchantId }).lean(),
     query
   );
 
-  // Apply query features
   queryBuilder
-    .search(['name', 'email']) // Add other searchable fields if needed
+    .search(['firstName', 'email']) // name field বদলে firstName
     .filter()
     .sort()
     .fields()
     .paginate();
 
-  // Execute query
   const users = await queryBuilder.modelQuery;
-
-  // Get pagination info
   const paginationInfo = await queryBuilder.getPaginationInfo();
 
   return { users, paginationInfo };

@@ -155,7 +155,19 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
     subscriptionStatus,
     customerName,
     location,
+    paymentStatus,
+    city
   } = req.query;
+
+  console.log("Controller - Received query:", {
+    startDate,
+    endDate,
+    subscriptionStatus,
+    customerName,
+    location,
+    paymentStatus,
+    city
+   });
 
   // Get logged-in user role
   const userRole = (req.user as any)?.role;
@@ -170,6 +182,8 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
       subscriptionStatus: subscriptionStatus as string,
       customerName: customerName as string,
       location: location as string,
+      paymentStatus: paymentStatus as string,
+      city: city as string
     },
     userRole // pass role
   );
@@ -197,6 +211,72 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
 });
 
 
+
+
+// const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
+//   const {
+//     startDate,
+//     endDate,
+//     page = "1",
+//     limit = "10",
+//     subscriptionStatus,
+//     customerName,
+//     location,
+//     paymentStatus,
+//     city,
+//   } = req.query;
+
+//   console.log("Controller - Received query:", {
+//     startDate,
+//     endDate,
+//     subscriptionStatus,
+//     customerName,
+//     location,
+//     paymentStatus,
+//     city
+//   });
+
+//   // Get logged-in user role
+//   const userRole = (req.user as any)?.role;
+//   console.log("Controller - User Role:", userRole);
+
+//   // ---------------- Normalize paymentStatus ----------------
+//   const normalizedPaymentStatus = paymentStatus ? (paymentStatus as string).toLowerCase() : undefined;
+
+//   console
+
+//   const result = await AnalyticsService.getCustomerAnalytics(
+//     startDate as string,
+//     endDate as string,
+//     Number(page),
+//     Number(limit),
+//     {
+//       subscriptionStatus: subscriptionStatus as string,
+//       customerName: customerName as string,
+//       location: location as string,
+//       paymentStatus: normalizedPaymentStatus, // small case send
+//       city: city as string
+//     },
+//     userRole
+//   );
+
+//   console.log(
+//     "Controller - Records Fetched:", result.data.records.length,
+//     "Total Records Count:", result.pagination.total
+//   );
+//   console.log(
+//     "Controller - Monthly Data Count:", result.data.monthlyData.length,
+//     "Sensitive fields masked:", userRole === "VIEW_ADMIN"
+//   );
+
+//   sendResponse(res, {
+//     success: true,
+//     statusCode: StatusCodes.OK,
+//     message: "Customer analytics fetched successfully",
+//     data: result.data,
+//     pagination: result.pagination,
+//   });
+// });
 
 const exportCustomerAnalytics = catchAsync(
   async (req: Request, res: Response) => {

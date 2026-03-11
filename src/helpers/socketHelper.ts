@@ -37,12 +37,30 @@ const socket = (io: Server) => {
 
       logger.info(colors.blue(`User connected: ${verifiedUser.id}`));
 
+      // এখানে connected users দেখতে চাও
+      const socketsArray = Array.from(io.sockets.sockets.values());
+      const connectedUsers = socketsArray.map((s: any) => ({
+        socketId: s.id,
+        userId: s.data.userId,
+      }));
+
+      console.log("💠 Current Connected Users:", connectedUsers);
+
       socket.on("disconnect", async () => {
         await User.findByIdAndUpdate(socket.data.userId, {
           $pull: { socketIds: socket.id },
         });
 
         logger.info(colors.red(`User disconnected: ${socket.data.userId}`));
+
+          // 3️⃣ Optionally, show all currently connected users
+        const io = (global as any).io;
+        const socketsArray = Array.from(io.sockets.sockets.values());
+        const connectedUsers = socketsArray.map((s: any) => ({
+          socketId: s.id,
+          userId: s.data.userId,
+        }));
+        console.log("💠 Current Connected Users after disconnect:", connectedUsers);
       });
     } catch (error) {
       logger.error(error);

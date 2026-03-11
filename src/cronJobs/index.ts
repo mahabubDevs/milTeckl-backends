@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { logger } from "../shared/logger";
 import { updateMerchantVipCustomersJob } from "./vipCustomer";
 import { downgradeInactiveTiers } from "./updateMerchantVipCustomersJob";
+import { cleanupExpiredSells } from "./cleanupExpiredSells";
  // তোমার cron logic function
 
 export const startCronJobs = () => {
@@ -27,6 +28,15 @@ export const startCronJobs = () => {
         logger.error("[CRON] Tier downgrade job failed", error);
       }
     });
+
+     // 🔹 Pending Sell Cleanup → প্রতি মিনিটে
+    // cron.schedule("* * * * *", async () => {
+    //   logger.info("[CRON] Sell cleanup job running");
+    //     await cleanupExpiredSells();
+ 
+    // });
+
+    logger.info("[CRON] All cron jobs registered");
 
     logger.info("[CRON] All cron jobs registered");
   } catch (error) {
