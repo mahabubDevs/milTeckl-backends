@@ -10,10 +10,11 @@ import { generateExcelBuffer } from "../../../helpers/excelExport";
 const getBusinessCustomerAnalytics = catchAsync(
   async (req: Request, res: Response) => {
     const user = req.user as any;
+
     const merchantId = user._id;
     const role = user.role;
-    const isSubMerchant = user.isSubMerchant; // check if VIEW_MERCENT
-    const mainMerchantId = user.merchantId?.toString(); // root merchant id
+    const isSubMerchant = user.isSubMerchant;
+    const mainMerchantId = user.merchantId?.toString();
 
     const {
       startDate,
@@ -23,10 +24,10 @@ const getBusinessCustomerAnalytics = catchAsync(
       subscriptionStatus,
       customerName,
       location,
-      city
+      city,
+      paymentStatus
     } = req.query;
 
-    // Call service with effective merchant logic
     const result = await AnalyticsService.getBusinessCustomerAnalytics(
       merchantId,
       startDate as string,
@@ -37,7 +38,8 @@ const getBusinessCustomerAnalytics = catchAsync(
         subscriptionStatus: subscriptionStatus as string,
         customerName: customerName as string,
         location: location as string,
-        city: city as string
+        city: city as string,
+        paymentStatus: paymentStatus as string,
       },
       role,
       isSubMerchant,
@@ -373,15 +375,24 @@ const exportCustomerAnalytics = catchAsync(
 // controller.ts
 const exportMerchantAnalytics = catchAsync(
   async (req: Request, res: Response) => {
-    const { startDate, endDate, subscriptionStatus, merchantName, location } =
-      req.query;
+    const {
+      startDate,
+      endDate,
+      subscriptionStatus,
+      customerName,
+      location,
+      paymentStatus,
+      city
+    } = req.query;
 
     console.log("🚀 Export request received with filters:", {
       startDate,
       endDate,
       subscriptionStatus,
-      merchantName,
+      customerName,
       location,
+      paymentStatus,
+      city
     });
 
     // Export all filtered data
@@ -392,32 +403,34 @@ const exportMerchantAnalytics = catchAsync(
       0, // 0 = export all
       {
         subscriptionStatus: subscriptionStatus as string,
-        merchantName: merchantName as string,
+        customerName: customerName as string,
         location: location as string,
+        paymentStatus: paymentStatus as string,
+        city: city as string
       }
     );
 
     console.log("🔹 Aggregated records count:", result.records.length);
-
-    const records = result.records;
-
-    // Show first 5 records for debug
-    console.log("🔸 Sample records:", records.slice(0, 5));
+    console.log("🔸 Sample records:", result.records.slice(0, 5));
 
     const columns = [
-      { header: "Merchant Name", key: "merchantName" },
+      { header: "Business Name", key: "customerName" },
+      // { header: "Last Name", key: "lastName" },
+      { header: "Email", key: "email" },
+      { header: "Phone", key: "phone" },
       { header: "Location", key: "location" },
       { header: "Subscription Status", key: "subscriptionStatus" },
-      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Payment Status", key: "paymentStatus" },
+      { header: "Points Accumulated", key: "pointsAccumulated" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Users Count", key: "usersCount" },
-      { header: "Joining Date", key: "joiningDate" },
+      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Joining Date", key: "date" },
     ];
 
     const buffer = await generateExcelBuffer({
       sheetName: "Merchant Analytics",
       columns,
-      rows: records,
+      rows: result.records,
     });
 
     console.log("✅ Excel buffer generated, size:", buffer.length, "bytes");
