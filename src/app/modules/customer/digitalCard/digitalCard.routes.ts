@@ -11,6 +11,11 @@ const router = Router();
 // router.post("/add", auth(), DigitalCardController.addPromotion);
 router.post("/add", auth(USER_ROLES.USER), DigitalCardController.addPromotion);
 
+router.post( "/create-digital-card",
+  auth(USER_ROLES.USER),
+  DigitalCardController.createOrGetUserDigitalCard
+);
+
 router.get("/my-promotions", auth(USER_ROLES.USER), DigitalCardController.getUserAddedPromotions);
 router.get("/my-digital-cards", auth(USER_ROLES.USER), DigitalCardController.getUserDigitalCards);
 router.get(

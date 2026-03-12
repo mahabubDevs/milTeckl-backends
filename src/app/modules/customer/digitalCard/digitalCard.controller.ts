@@ -247,11 +247,52 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
 //   }
 // );
 
+
+const createOrGetUserDigitalCard = catchAsync(async (req, res) => {
+  if (!req.user) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.UNAUTHORIZED,
+      success: false,
+      message: "User not authenticated",
+    });
+  }
+
+  const user = req.user as any; // auth থেকে user info
+  const userId = (user._id as Types.ObjectId).toString();
+
+  const { merchantId } = req.body;
+  if (!merchantId) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "merchantId is required",
+    });
+  }
+
+  // Service call → check & create if not exist
+  const digitalCard = await DigitalCardService.createOrGetDigitalCard(userId, merchantId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Digital card fetched/created successfully",
+    data: {
+      cardId: digitalCard._id,
+      cardCode: digitalCard.cardCode,
+      promotions: digitalCard.promotions,
+      merchantId: digitalCard.merchantId,
+      userId: digitalCard.userId,
+    },
+  });
+});
+
+
 export const DigitalCardController = {
   addPromotion,
   getUserAddedPromotions,
   getUserDigitalCards,
   getDigitalCardPromotions,
   getMerchantDigitalCard,
+  createOrGetUserDigitalCard,
   //   approvePromotion
 };

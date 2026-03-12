@@ -235,9 +235,9 @@ const checkout = async (
       throw new Error(`Promotion ${promoId} not found in card`);
     }
 
-    if (!["pending", "unused"].includes(promoInCard.status)) {
-      throw new Error(`Promotion ${promoId} already used`);
-    }
+    // if (!["pending", "unused"].includes(promoInCard.status)) {
+    //   throw new Error(`Promotion ${promoId} already used`);
+    // }
 
     const promotion = await Promotion.findById(promoId);
     if (!promotion) {
@@ -563,9 +563,9 @@ const requestApproval = async ({
       throw new Error(`Promotion ${promoId} not found in digital card`);
     }
 
-    if (!["pending", "unused"].includes(promoInCard.status)) {
-      throw new Error(`Promotion ${promoId} already used`);
-    }
+    // if (!["pending", "unused"].includes(promoInCard.status)) {
+    //   throw new Error(`Promotion ${promoId} already used`);
+    // }
 
     const promotion = await Promotion.findById(promoId);
     if (!promotion) throw new Error(`Promotion ${promoId} not found`);
@@ -670,7 +670,7 @@ if (digitalCard.updatedAt < sixMonthsAgo && pointRedeemed > 0) {
     totalGrossValue,
     totalDiscount,
 
-    discountedBill,
+    discountedBill: parseFloat(discountedBill.toFixed(4)),
     pointRedeemed,
     pointDiscount,
 
