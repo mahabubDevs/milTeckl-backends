@@ -45,66 +45,244 @@ import { IDigitalCard } from "../../mercent/mercentCustomerList/mercentInterface
 //   return digitalCard;
 // };
 
-const addPromotionToDigitalCard = async (
-  userId: string,
-  promotionId: string
-) => {
-  // Promotion check
-  const promotion = await Promotion.findById(promotionId);
-  if (!promotion) {
-    throw new Error("Promotion not found");
-  }
+// const addPromotionToDigitalCard = async (
+//   userId: string,
+//   promotionId: string
+// ) => {
+//   // Promotion check
+//   const promotion = await Promotion.findById(promotionId);
+//   if (!promotion) {
+//     throw new Error("Promotion not found");
+//   }
 
-  const merchantId = promotion.merchantId;
+//   const merchantId = promotion.merchantId;
 
-  // Digital card check (user + merchant)
-  let digitalCard = await DigitalCard.findOne({ userId, merchantId });
+//   // Digital card check (user + merchant)
+//   let digitalCard = await DigitalCard.findOne({ userId, merchantId });
 
-  // If digital card does not exist → create new
-  if (!digitalCard) {
-    digitalCard = await DigitalCard.create({
-      userId,
-      merchantId,
-      cardCode: generateCardCode(),
-      promotions: [],
-    });
-  }
+//   // If digital card does not exist → create new
+//   if (!digitalCard) {
+//     digitalCard = await DigitalCard.create({
+//       userId,
+//       merchantId,
+//       cardCode: generateCardCode(),
+//       promotions: [],
+//     });
+//   }
 
-  // Convert promotionId → ObjectId
-  const promotionObjectId = new Types.ObjectId(promotionId);
+//   // Convert promotionId → ObjectId
+//   const promotionObjectId = new Types.ObjectId(promotionId);
 
-  // Add promotion if not exists already
-  const alreadyAdded = digitalCard.promotions.some(
-    (p) => p.promotionId && p.promotionId.equals(promotionObjectId)
-  );
+//   // Add promotion if not exists already
+//   const alreadyAdded = digitalCard.promotions.some(
+//     (p) => p.promotionId && p.promotionId.equals(promotionObjectId)
+//   );
 
-  const generatePromoCode = () => {
-  const randomNumber = Math.floor(100000 + Math.random() * 900000);
-  return `PC-${randomNumber}`;
-  };
+//   const generatePromoCode = () => {
+//   const randomNumber = Math.floor(100000 + Math.random() * 900000);
+//   return `PC-${randomNumber}`;
+//   };
 
 
-  if (!alreadyAdded) {
-    digitalCard.promotions.push({
-      promotionId: promotionObjectId,
-      status: "pending", // default status
-      usedAt: null,
-      promoCode: generatePromoCode(),
-    });
-  }
+//   if (!alreadyAdded) {
+//     digitalCard.promotions.push({
+//       promotionId: promotionObjectId,
+//       status: "pending", // default status
+//       usedAt: null,
+//       promoCode: generatePromoCode(),
+//     });
+//   }
 
   
 
 
-  await digitalCard.save();
+//   await digitalCard.save();
 
-  // Populate promotion details for response
+//   // Populate promotion details for response
+//   await digitalCard.populate({
+//     path: "promotions.promotionId",
+//     model: "PromotionMercent",
+//   });
+
+//   // Format response
+//   const allPromotions = digitalCard.promotions.map((promo) => ({
+//     cardCode: digitalCard.cardCode,
+//     promoCode: promo.promoCode,
+//     status: promo.status,
+//     usedAt: promo.usedAt,
+//     promotion: promo.promotionId,
+//   }));
+
+//   return {
+//     totalPromotions: allPromotions.length,
+//     promotions: allPromotions,
+//   };
+// };
+
+
+// const addPromotionToDigitalCard = async (
+//   userId: string,
+//   promotionId: string
+// ) => {
+//   console.log("🚀 addPromotionToDigitalCard called");
+//   console.log("👤 userId:", userId);
+//   console.log("🎯 promotionId:", promotionId);
+
+//   // Promotion check
+//   const promotion = await Promotion.findById(promotionId);
+
+//   console.log("🔍 Promotion query result:", promotion);
+
+//   if (!promotion) {
+//     console.log("❌ Promotion not found");
+//     throw new Error("Promotion not found");
+//   }
+
+//   const merchantId = promotion.merchantId;
+//   console.log("🏪 merchantId from promotion:", merchantId);
+
+//   // Digital card check (user + merchant)
+//   let digitalCard = await DigitalCard.findOne({ userId, merchantId });
+
+//   console.log("💳 Existing digitalCard:", digitalCard);
+
+//   // If digital card does not exist → create new
+//   if (!digitalCard) {
+//     console.log("🆕 No digital card found → creating new one");
+
+//     digitalCard = await DigitalCard.create({
+//       userId,
+//       merchantId,
+//       cardCode: generateCardCode(),
+//       promotions: [],
+//     });
+
+//     console.log("✅ Digital card created:", digitalCard);
+//   }
+
+//   // Convert promotionId → ObjectId
+//   const promotionObjectId = new Types.ObjectId(promotionId);
+//   console.log("🆔 promotionObjectId:", promotionObjectId);
+
+//   // Add promotion if not exists already
+//   const alreadyAdded = digitalCard.promotions.some((p) => {
+//     const match =
+//       p.promotionId && p.promotionId.equals(promotionObjectId);
+
+//     console.log("🔎 Checking promotion:", p.promotionId, "match:", match);
+
+//     return match;
+//   });
+
+//   console.log("📌 alreadyAdded:", alreadyAdded);
+
+//   const generatePromoCode = () => {
+//     const randomNumber = Math.floor(100000 + Math.random() * 900000);
+//     const code = `PC-${randomNumber}`;
+//     console.log("🎟 Generated promoCode:", code);
+//     return code;
+//   };
+
+//   if (!alreadyAdded) {
+//     console.log("➕ Adding promotion to digital card");
+
+//     digitalCard.promotions.push({
+//       promotionId: promotionObjectId,
+//       status: "pending",
+//       usedAt: null,
+//       promoCode: generatePromoCode(),
+//     });
+//   } else {
+//     console.log("⚠️ Promotion already added, skipping...");
+//   }
+
+//   console.log("💾 Saving digital card...");
+
+//   await digitalCard.save();
+
+//   console.log("✅ Digital card saved");
+
+//   // Populate promotion details for response
+//   console.log("📦 Populating promotion details...");
+
+//   await digitalCard.populate({
+//     path: "promotions.promotionId",
+//     model: "PromotionMercent",
+//   });
+
+//   console.log("✅ Populate done");
+
+//   // Format response
+//   const allPromotions = digitalCard.promotions.map((promo) => ({
+//     cardCode: digitalCard.cardCode,
+//     promoCode: promo.promoCode,
+//     status: promo.status,
+//     usedAt: promo.usedAt,
+//     promotion: promo.promotionId,
+//   }));
+
+//   console.log("📊 Final promotions list:", allPromotions);
+
+//   return {
+//     totalPromotions: allPromotions.length,
+//     promotions: allPromotions,
+//   };
+// };
+
+
+
+const addPromotionToDigitalCard = async (userId: string, promotionId: string) => {
+  const promotion = await Promotion.findById(promotionId);
+  if (!promotion) throw new Error("Promotion not found");
+
+  const merchantId = promotion.merchantId;
+  const promotionObjectId = new Types.ObjectId(promotionId);
+
+  // Find existing card
+  let digitalCard = await DigitalCard.findOne({
+    userId: new Types.ObjectId(userId),
+    merchantId: new Types.ObjectId(merchantId),
+  });
+
+  // Generate promo code helper
+  const generatePromoCode = () => `PC-${Math.floor(100000 + Math.random() * 900000)}`;
+
+  // If card doesn't exist → create with promotion
+  if (!digitalCard) {
+    digitalCard = await DigitalCard.create({
+      userId: new Types.ObjectId(userId),
+      merchantId: new Types.ObjectId(merchantId),
+      cardCode: generateCardCode(),
+      promotions: [{
+        promotionId: promotionObjectId,
+        status: "pending",
+        usedAt: null,
+        promoCode: generatePromoCode(),
+      }],
+    });
+  } else {
+    // Add promotion if not already added
+    const alreadyAdded = digitalCard.promotions.some(
+      (p) => p.promotionId?.toString() === promotionObjectId.toString()
+    );
+
+    if (!alreadyAdded) {
+      digitalCard.promotions.push({
+        promotionId: promotionObjectId,
+        status: "pending",
+        usedAt: null,
+        promoCode: generatePromoCode(),
+      });
+      await digitalCard.save();
+    }
+  }
+
+  // Populate for response
   await digitalCard.populate({
     path: "promotions.promotionId",
     model: "PromotionMercent",
   });
 
-  // Format response
   const allPromotions = digitalCard.promotions.map((promo) => ({
     cardCode: digitalCard.cardCode,
     promoCode: promo.promoCode,
