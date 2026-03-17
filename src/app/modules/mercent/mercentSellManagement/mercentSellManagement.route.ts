@@ -2,11 +2,12 @@ import express from "express";
 import auth from "../../../middlewares/auth";
 import { USER_ROLES } from "../../../../enums/user";
 import mercentSellManagementController from "./mercentSellManagement.controller";
+import { canAccessMerchantProfile } from "../../../middlewares/accessMerchentProfile";
 
 
 const router = express.Router();
 
-router.post("/checkout", auth(USER_ROLES.MERCENT), mercentSellManagementController.checkout);
+router.post("/checkout", auth(USER_ROLES.MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile, mercentSellManagementController.checkout);
 
 // router.post(
 //   "/promotion/request-approval",
@@ -22,7 +23,7 @@ router.post("/checkout", auth(USER_ROLES.MERCENT), mercentSellManagementControll
 
 
 // Merchant → Request Approval
-router.post("/promotion/request-approval", auth(USER_ROLES.MERCENT), mercentSellManagementController.requestApproval);
+router.post("/promotion/request-approval", auth(USER_ROLES.MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile, mercentSellManagementController.requestApproval);
 
 // User → Get Pending Promotions
 router.get("/promotion/pending", auth(), mercentSellManagementController.getPendingRequests);
@@ -48,17 +49,26 @@ router.get(
 
 router.get(
   "/merchant",
-  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   mercentSellManagementController.getMerchantSales
 );
 
 router.get(
   "/customer",
-  auth(USER_ROLES.MERCENT, USER_ROLES.VIEW_MERCENT,USER_ROLES.USER),
+  auth(USER_ROLES.MERCENT, USER_ROLES.VIEW_MERCENT,USER_ROLES.USER, USER_ROLES.ADMIN_MERCENT), canAccessMerchantProfile,
   mercentSellManagementController.getMerchantCustomersList
 );
+router.get(
+  "/recent-new/customer",
+  auth(USER_ROLES.MERCENT, USER_ROLES.VIEW_MERCENT,USER_ROLES.USER, USER_ROLES.ADMIN_MERCENT), canAccessMerchantProfile,
+  mercentSellManagementController.getRecentMerchantCustomersList
+);
 
-
+router.get(
+  "/customer/export",
+  auth(USER_ROLES.MERCENT,),
+  mercentSellManagementController.exportMerchantCustomersExcel
+);
 // router.post(
 //   "/finalize-checkout",
 //   auth(USER_ROLES.MERCENT),

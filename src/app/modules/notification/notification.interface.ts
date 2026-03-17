@@ -2,6 +2,7 @@ import { Model, Types } from "mongoose";
 import { NotificationType } from "./notification.model";
 
 export interface INotification {
+  _id?: Types.ObjectId;
   userId: Types.ObjectId;
   title: string;
   body: string;

@@ -10,12 +10,15 @@ import { Types } from "mongoose";
 import { IDigitalCard, ISell } from "./mercentSellManagement.interface";
 import QueryBuilder from "../../../../util/queryBuilder";
 import { Rating } from "../../customer/rating/rating.model";
+import moment from "moment";
+import ExcelJ from "exceljs";
 
 // 🔹 Demo data fallback
 
 
 const checkout = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, totalBill, promotionId, pointRedeemed } = req.body;
+  const { digitalCardCode, totalBill, promotionId = [], pointRedeemed = 0 } = req.body;
+
   console.log("Checkout request body:", req.body);
 
   if (!req.user) {
@@ -26,22 +29,18 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // -----------------------------
-  // Safe casting to IUser
-  // -----------------------------
   const user = req.user as IUser;
 
-  // Only allow merchant
-  if (user.role !== "MERCENT") {
+  if (user.role !== "MERCENT" && !user.isSubMerchant) {
     return sendResponse(res, {
       statusCode: StatusCodes.FORBIDDEN,
       success: false,
-      message: "Only merchant can perform checkout",
+      message: "Only merchant or merchant staff can perform checkout",
     });
   }
 
-  // Safely extract _id
-  const merchantId = user._id?.toString();
+  const merchantId = user.isSubMerchant ? user.merchantId : user._id;
+
   if (!merchantId) {
     return sendResponse(res, {
       statusCode: StatusCodes.BAD_REQUEST,
@@ -50,12 +49,18 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // Call service
+  // ✅ always pass as array
+  const promotionIdsArray = Array.isArray(promotionId)
+    ? promotionId
+    : promotionId
+    ? [promotionId]
+    : [];
+
   const result = await SellService.checkout(
-    merchantId,
+    merchantId.toString(),
     digitalCardCode,
     totalBill,
-    promotionId,
+    promotionIdsArray,   // ✅ fixed
     pointRedeemed
   );
 
@@ -68,16 +73,26 @@ const checkout = catchAsync(async (req: Request, res: Response) => {
 });
 
 
+
+
+
+
 const requestApproval = catchAsync(async (req: Request, res: Response) => {
   const {
     digitalCardCode,
-    promotionId,
+    promotionId = [],
     totalBill = 0,
     pointRedeemed = 0,
   } = req.body;
-  const merchant = req.user as IUser;
 
-  if (!merchant._id) {
+  const user = req.user as IUser;
+
+  console.log("Request Approval body:", req.body);
+
+  // ✅ Determine merchant ID based on user role
+  const merchantId = user.isSubMerchant ? user.merchantId : user._id;
+
+  if (!merchantId) {
     return sendResponse(res, {
       statusCode: StatusCodes.BAD_REQUEST,
       success: false,
@@ -85,8 +100,18 @@ const requestApproval = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
+  // ✅ Negative value check
+  if (totalBill < 0 || pointRedeemed < 0) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "totalBill and pointRedeemed cannot be negative",
+    });
+  }
+
+  // ✅ Pass resolved merchantId to service
   const result = await SellService.requestApproval({
-    merchantId: merchant._id.toString(),
+    merchantId: merchantId.toString(), // always the real merchant
     digitalCardCode,
     promotionId,
     totalBill,
@@ -100,6 +125,8 @@ const requestApproval = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
+
 
 // User → Get Pending Requests
 const getPendingRequests = catchAsync(async (req: Request, res: Response) => {
@@ -124,7 +151,7 @@ const getPendingRequests = catchAsync(async (req: Request, res: Response) => {
 });
 
 const approvePromotion = catchAsync(async (req: Request, res: Response) => {
-  const { digitalCardCode, promotionId } = req.body;
+  const { digitalCardCode, promotionId, sellId } = req.body;
   const user = req.user as IUser;
 
   if (!user._id) {
@@ -135,10 +162,14 @@ const approvePromotion = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
+  // Ensure promotionId is an array
+  const promotionIds = Array.isArray(promotionId) ? promotionId : [promotionId];
+
   const result = await SellService.approvePromotion(
     digitalCardCode,
-    promotionId,
-    user._id.toString()
+    promotionIds,
+    user._id.toString(),
+    sellId // optional
   );
 
   sendResponse(res, {
@@ -149,9 +180,10 @@ const approvePromotion = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
 const approvePromotionreject = catchAsync(
   async (req: Request, res: Response) => {
-    const { digitalCardCode, promotionId } = req.body;
+    const { digitalCardCode, promotionId, sellId } = req.body;
     const user = req.user as IUser;
 
     if (!user._id) {
@@ -162,20 +194,24 @@ const approvePromotionreject = catchAsync(
       });
     }
 
+    const promotionIds = Array.isArray(promotionId) ? promotionId : [promotionId];
+
     const result = await SellService.approvePromotionReject(
       digitalCardCode,
-      promotionId,
-      user._id.toString()
+      promotionIds,
+      user._id.toString(),
+      sellId // optional
     );
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
       success: true,
-      message: "Promotion approved successfully",
+      message: "Promotion rejected successfully",
       data: result,
     });
   }
 );
+
 
 // Controller
 const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
@@ -233,173 +269,315 @@ const getUserFullTransactions = catchAsync(async (req: Request, res: Response) =
 
 const getMerchantSales = async (req: Request, res: Response) => {
   try {
-    // 🔐 Get merchant from login
-    const merchant = req.user as { _id: string; role?: string };
+    // -----------------------------
+    // 0️⃣ Merchant / Sub-Merchant Check
+    // -----------------------------
+    const user = req.user as {
+      _id: string;
+      role?: string;
+      isSubMerchant?: boolean;
+      merchantId?: string;
+    };
 
-    if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
+    console.log("👤 User Info:", user);
+
+    if (!user?._id || !Types.ObjectId.isValid(user._id)) {
+      console.log("❌ Unauthorized merchant access attempt");
       return res.status(401).json({
         success: false,
         message: "Unauthorized merchant",
       });
     }
 
-    const merchantId = merchant._id;
-    console.log("Merchant ID (from login):", merchantId);
+    const merchantId = user.isSubMerchant ? user.merchantId : user._id;
+    console.log("🛒 Merchant ID:", merchantId);
 
-    // 1️⃣ Base query for this merchant
-    let query = Sell.find({ merchantId });
+    // -----------------------------
+    // 1️⃣ Date Filter (UTC)
+    // -----------------------------
+    const period = req.query.period as string;
+    const monthParam = req.query.month as string;
+    const now = new Date();
+    let dateFilter: any = {};
+    const currentYear = now.getUTCFullYear();
 
-    // 2️⃣ Apply search, filter, sort, pagination using QueryBuilder
-    const qb = new QueryBuilder(query, req.query)
-      .filter() // filters from query params
-      .search(["userId.firstName", "userId.lastName"]) // search term
-      .sort()
-      .paginate()
-      .populate(["userId", "digitalCardId"], {
-        userId: "firstName lastName email phone profile customUserId",
-        digitalCardId: "cardCode",
+    // Monthly filter (Present Year Only)
+    if (monthParam && Number(monthParam) >= 1 && Number(monthParam) <= 12) {
+      const month = Number(monthParam) - 1;
+      const startOfMonth = new Date(Date.UTC(currentYear, month, 1, 0, 0, 0));
+      const endOfMonth = new Date(Date.UTC(currentYear, month + 1, 0, 23, 59, 59, 999));
+      dateFilter.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+    } else if (period === "day") {
+      const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      dateFilter.createdAt = { $gte: startOfDay };
+    } else if (period === "week") {
+      const startOfWeek = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - now.getUTCDay()));
+      dateFilter.createdAt = { $gte: startOfWeek };
+    } else if (period === "month") {
+      const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      dateFilter.createdAt = { $gte: startOfMonth };
+    }
+
+    // -----------------------------
+    // 1️⃣a Debug: Show Date Filter
+    // -----------------------------
+    console.log("🗓️ Date Filter Applied:", dateFilter);
+    console.log("🛠️ Month Param:", monthParam);
+    console.log("🛠️ Period Param:", period);
+
+    // -----------------------------
+    // 2️⃣ Search Term
+    // -----------------------------
+    const searchTerm = (req.query.searchTerm as string)?.toLowerCase() || "";
+    console.log("🔍 Search Term:", searchTerm);
+
+    // -----------------------------
+    // 3️⃣ Pagination
+    // -----------------------------
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    console.log("📄 Pagination - Page:", page, "Limit:", limit, "Skip:", skip);
+
+    // -----------------------------
+    // 4️⃣ Fetch Sales
+    // -----------------------------
+    let sales = await Sell.find({ merchantId, status: "completed", ...dateFilter })
+      .populate("userId", "firstName lastName email phone profile customUserId")
+      .populate("digitalCardId", "cardCode")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    console.log("💰 Fetched Sales Count:", sales.length);
+
+    // Log each sale basic info
+    sales.forEach((tx: any, i: number) => {
+      console.log(`🧾 Sale #${i + 1}:`, {
+        _id: tx._id,
+        user: tx.userId ? `${tx.userId.firstName} ${tx.userId.lastName}` : null,
+        email: tx.userId?.email,
+        phone: tx.userId?.phone,
+        cardCode: tx.digitalCardId?.cardCode,
+        pointsEarned: tx.pointsEarned,
+        pointsRedeemed: tx.pointRedeemed,
+        totalBill: tx.totalBill,
+        discountedBill: tx.discountedBill,
+        status: tx.status,
+        createdAt: tx.createdAt,
       });
-
-    // Execute query
-    const sales = await qb.modelQuery.lean();
-    const paginationInfo = await qb.getPaginationInfo();
+    });
 
     if (!sales || sales.length === 0) {
+      console.log("⚠️ No sales found for this period");
       return res.status(200).json({
         success: true,
         data: [],
-        pagination: paginationInfo,
-        message: "No sales yet",
+        pagination: { page: 1, limit: 0, total: 0, totalPage: 0 },
+        message: "No sales found for this period",
       });
     }
 
-    // 3️⃣ Aggregate user data
-    interface IUserSummary {
-      _id: string;
-      name: string;
-      email?: string;
-      phone?: string;
-      profile?: string;
-      totalTransactions: number;
-      totalPointsEarned: number;
-      totalPointsRedeemed: number;
-      totalBilled?: number;
-      finalBilled?: number;
-      cardIds?: string; // single card code as string
-      status?: string;
-      customUserId?: string;
+    // -----------------------------
+    // 5️⃣ Apply SEARCH
+    // -----------------------------
+    if (searchTerm) {
+      sales = sales.filter((tx: any) => {
+        const u = tx.userId || {};
+        const c = tx.digitalCardId || {};
+        return (
+          u.firstName?.toLowerCase().includes(searchTerm) ||
+          u.lastName?.toLowerCase().includes(searchTerm) ||
+          u.email?.toLowerCase().includes(searchTerm) ||
+          u.phone?.toLowerCase().includes(searchTerm) ||
+          c.cardCode?.toLowerCase().includes(searchTerm)
+        );
+      });
+      console.log("🔍 After Search Filter Count:", sales.length);
     }
 
-    const userMap: Record<string, IUserSummary> = {};
+    const total = await Sell.countDocuments({ merchantId, ...dateFilter });
+    console.log("📊 Total Documents Matching Filter:", total);
 
-    sales.forEach((tx: any) => {
-      const user = tx.userId;
-      if (!user || !user._id) return;
-      const userId = user._id.toString();
+    // -----------------------------
+    // 6️⃣ Prepare Transaction Response
+    // -----------------------------
+    const transactionData = sales.map((tx: any) => ({
+      _id: tx.userId?._id,
+      name: `${tx.userId?.firstName || ""} ${tx.userId?.lastName || ""}`.trim(),
+      email: tx.userId?.email,
+      phone: tx.userId?.phone,
+      profile: tx.userId?.profile,
+      customUserId: tx.userId?.customUserId,
+      totalTransactions: 1,
+      totalPointsEarned: tx.pointsEarned || 0,
+      totalPointsRedeemed: tx.pointRedeemed || 0,
+      totalBilled: tx.totalBill || 0,
+      finalBilled: tx.discountedBill || 0,
+      cardIds: tx.digitalCardId?.cardCode || "",
+      status: tx.status || "",
+      createdAt: tx.createdAt,
+    }));
 
-      if (!userMap[userId]) {
-        userMap[userId] = {
-          _id: userId,
-          name: user.firstName + (user.lastName ? ` ${user.lastName}` : ""),
-          email: user.email,
-          customUserId: user.customUserId || "",
-          phone: user.phone,
-          profile: user.profile,
-          totalTransactions: 0,
-          totalPointsEarned: 0,
-          totalPointsRedeemed: 0,
-          totalBilled: 0,
-          finalBilled: 0,
-          cardIds: "",
-        };
-      }
+    console.log("✅ Prepared Transaction Data Count:", transactionData.length);
 
-      userMap[userId].totalTransactions += 1;
-      userMap[userId].totalPointsEarned += tx.pointsEarned || 0;
-      userMap[userId].totalPointsRedeemed += tx.pointRedeemed || 0;
-      userMap[userId].totalBilled! += tx.totalBill || 0;
-      userMap[userId].finalBilled! += tx.discountedBill || 0;
-      userMap[userId].status = tx.status || "";
-
-      if (tx.digitalCardId && tx.digitalCardId.cardCode) {
-        userMap[userId].cardIds = tx.digitalCardId.cardCode;
-      }
-    });
-
-    const result = Object.values(userMap);
-
+    // -----------------------------
+    // 7️⃣ Response
+    // -----------------------------
     return res.status(200).json({
       success: true,
-      data: result,
-      pagination: paginationInfo,
+      data: transactionData,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPage: Math.ceil(total / limit),
+      },
     });
+
   } catch (error) {
-    console.error("Error in getMerchantSales:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error,
-    });
+    console.error("❌ Error in getMerchantSales:", error);
+    return res.status(500).json({ success: false, message: "Server Error" });
   }
 };
 
 
 
 
-const getMerchantCustomersList = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    // 🔐 merchant from logged-in user
-    const merchant = req.user as { _id: string; role?: string };
 
-    if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
+
+const getMerchantCustomersList = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+
+    // ✅ Decide which ID to use for filtering
+    const filterId = user.isSubMerchant ? user.merchantId : user._id;
+
+    if (!filterId || !Types.ObjectId.isValid(filterId)) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized merchant",
       });
     }
 
-    const merchantId = merchant._id;
+    const merchantId = filterId;
 
-    // 1️⃣ Base query (this merchant only)
-    let query = Sell.find({ merchantId });
+    /* -----------------------------
+       0️⃣ Date filter based on period (UTC)
+    ------------------------------*/
+    const period = req.query.period as string;
+    const now = new Date();
+    let dateFilter: any = {};
 
-    // 2️⃣ Apply query builder
-    const qb = new QueryBuilder(query, req.query)
-      .filter()
-      .search(["userId.firstName", "userId.lastName"])
-      .sort()
-      .paginate()
-      .populate(["userId", "digitalCardId", "merchantId"], {
-        userId: "firstName lastName email phone profile customUserId country",
-        digitalCardId: "cardCode availablePoints tier createdAt",
-        merchantId: "businessName shopName firstName",
-      });
+    if (period === "day") {
+      const startOfDayUTC = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+      );
+      dateFilter = { createdAt: { $gte: startOfDayUTC } };
+    } else if (period === "week") {
+      const startOfWeekUTC = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate() - now.getUTCDay()
+        )
+      );
+      dateFilter = { createdAt: { $gte: startOfWeekUTC } };
+    } else if (period === "month") {
+      const startOfMonthUTC = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+      );
+      dateFilter = { createdAt: { $gte: startOfMonthUTC } };
+    }
 
-    // 3️⃣ Execute query
-    const sales = await qb.modelQuery.lean();
-    const paginationInfo = await qb.getPaginationInfo();
+    console.log("📌 Period filter:", period);
+    console.log("📌 Date filter applied (UTC):", dateFilter);
+
+    /* -----------------------------
+       🔍 Search keyword
+    ------------------------------*/
+    const search = (req.query.search as string)?.toLowerCase() || "";
+
+    /* -----------------------------
+       1️⃣ Fetch all completed sells
+    ------------------------------*/
+    const sales = await Sell.find({
+      merchantId,
+      status: "completed",
+      ...dateFilter,
+    })
+      .populate(
+        "userId",
+        "firstName lastName email phone profile customUserId country"
+      )
+      .populate("digitalCardId", "cardCode availablePoints tier createdAt")
+      .populate("merchantId", "businessName shopName firstName")
+      .lean();
 
     if (!sales.length) {
       return res.status(200).json({
         success: true,
         data: [],
-        pagination: paginationInfo,
+        pagination: {
+          page: 1,
+          limit: 0,
+          total: 0,
+          totalPage: 0,
+        },
       });
     }
 
-    // 4️⃣ Collect unique customer userIds
+    /* -----------------------------
+       🔍 Apply SEARCH (JS level)
+    ------------------------------*/
+/* -----------------------------
+   🔍 Apply SEARCH (JS level)
+   Only by customer ID, name, or country
+------------------------------*/
+// Remove any previous `const search` declaration
+const searchTerm = ((req.query.search as string) || (req.query.searchTerm as string) || "")
+  .toLowerCase()
+  .trim();
+
+let filteredSales = sales;
+
+if (searchTerm) {
+  console.log("🔍 Search keyword:", searchTerm);
+
+  filteredSales = sales.filter((tx: any) => {
+    const user = tx.userId || {};
+    const fullName = `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
+    const customId = (user.customUserId || "").toLowerCase();
+    const country = (user.country || "").toLowerCase();
+
+    console.log("🧾 Checking user:", {
+      fullName,
+      customId,
+      country,
+    });
+
+    return (
+      fullName.includes(searchTerm) ||    // search by name
+      customId.includes(searchTerm) ||    // search by customer ID
+      country.includes(searchTerm)        // search by country/location
+    );
+  });
+}
+
+
+
+    /* -----------------------------
+       2️⃣ Ratings
+    ------------------------------*/
     const userIds = [
       ...new Set(
-        sales
+        filteredSales
           .map((tx: any) => tx.userId?._id?.toString())
           .filter(Boolean)
       ),
     ];
 
-    // 5️⃣ Fetch ratings (given to this merchant)
     const ratings = await Rating.find({
       merchantId,
       userId: { $in: userIds },
@@ -407,44 +585,17 @@ const getMerchantCustomersList = async (
       .select("userId rating comment")
       .lean();
 
-    // 6️⃣ Build rating map
-    const ratingMap: Record<string, { rating: number; comment: string }> = {};
-
+    const ratingMap: Record<string, any> = {};
     ratings.forEach((r: any) => {
-      ratingMap[r.userId.toString()] = {
-        rating: r.rating,
-        comment: r.comment,
-      };
+      ratingMap[r.userId.toString()] = r;
     });
 
-    // 7️⃣ Customer summary interface
-    interface IUserSummary {
-      _id: string;
-      name: string;
-      email?: string;
-      phone?: string;
-      profile?: string;
-      country?: string;
-      customUserId?: string;
-      totalTransactions: number;
-      totalPointsEarned: number;
-      totalPointsRedeemed: number;
-      totalBilled: number;
-      finalBilled: number;
-      cardIds?: string;
-      availablePoints?: number;
-      status?: string;
-      salesRep?: string;
-      rating?: number;
-      ratingComment?: string;
-      tier?: string;
-      createdAt?: Date;
-    }
+    /* -----------------------------
+       3️⃣ Aggregate customer data
+    ------------------------------*/
+    const userMap: Record<string, any> = {};
 
-    const userMap: Record<string, IUserSummary> = {};
-
-    // 8️⃣ Aggregate sales per customer
-    sales.forEach((tx: any) => {
+    filteredSales.forEach((tx: any) => {
       const user = tx.userId;
       if (!user?._id) return;
 
@@ -464,10 +615,10 @@ const getMerchantCustomersList = async (
           totalPointsRedeemed: 0,
           totalBilled: 0,
           finalBilled: 0,
-          cardIds: "",
           availablePoints: tx.digitalCardId?.availablePoints || 0,
           tier: tx.digitalCardId?.tier || "",
           createdAt: tx.digitalCardId?.createdAt || null,
+          digitalCardId: tx.digitalCardId?._id || null,
           salesRep:
             tx.merchantId?.businessName ||
             tx.merchantId?.shopName ||
@@ -475,6 +626,7 @@ const getMerchantCustomersList = async (
             "",
           rating: ratingMap[userId]?.rating,
           ratingComment: ratingMap[userId]?.comment,
+          status: "completed",
         };
       }
 
@@ -483,21 +635,32 @@ const getMerchantCustomersList = async (
       userMap[userId].totalPointsRedeemed += tx.pointRedeemed || 0;
       userMap[userId].totalBilled += tx.totalBill || 0;
       userMap[userId].finalBilled += tx.discountedBill || 0;
-      userMap[userId].status = tx.status;
-
-      if (tx.digitalCardId?.cardCode) {
-        userMap[userId].cardIds = tx.digitalCardId.cardCode;
-      }
     });
 
-    // 9️⃣ Response
+    /* -----------------------------
+       4️⃣ Manual Pagination
+    ------------------------------*/
+    const customers = Object.values(userMap);
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const paginatedCustomers = customers.slice(skip, skip + limit);
+
+    /* -----------------------------
+       5️⃣ Response
+    ------------------------------*/
     return res.status(200).json({
       success: true,
-      data: Object.values(userMap),
-      pagination: paginationInfo,
+      data: paginatedCustomers,
+      pagination: {
+        page,
+        limit,
+        total: customers.length,
+        totalPage: Math.ceil(customers.length / limit),
+      },
     });
   } catch (error) {
-    console.error("Error in getMerchantCustomersList:", error);
+    console.error("❌ Error in getMerchantCustomersList:", error);
     return res.status(500).json({
       success: false,
       message: "Server Error",
@@ -506,6 +669,299 @@ const getMerchantCustomersList = async (
 };
 
 
+const getRecentMerchantCustomersList = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+
+    // ✅ Merchant / Sub-merchant filter
+    const filterId = user.isSubMerchant ? user.merchantId : user._id;
+
+    if (!filterId || !Types.ObjectId.isValid(filterId)) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized merchant",
+      });
+    }
+
+    const merchantId = new Types.ObjectId(filterId);
+
+    /* -----------------------------
+       🔍 Search (name / customUserId / country)
+    ------------------------------*/
+    const searchTerm = ((req.query.searchTerm as string) || "")
+      .toLowerCase()
+      .trim();
+
+    /* -----------------------------
+       📊 Aggregation for NEW MEMBERS
+    ------------------------------*/
+    const pipeline: any[] = [
+      {
+        $match: {
+          merchantId,
+          status: "completed",
+        },
+      },
+      {
+        // group by customer
+        $group: {
+          _id: "$userId",
+          firstPurchaseAt: { $min: "$createdAt" },
+          totalTransactions: { $sum: 1 },
+          totalPointsEarned: { $sum: "$pointsEarned" },
+          totalPointsRedeemed: { $sum: "$pointRedeemed" },
+          totalBilled: { $sum: "$totalBill" },
+          finalBilled: { $sum: "$discountedBill" },
+        },
+      },
+      {
+        // newest member first
+        $sort: { firstPurchaseAt: -1 },
+      },
+      {
+        // user join
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+      {
+        // optional search
+        $match: searchTerm
+          ? {
+              $or: [
+                {
+                  "user.firstName": {
+                    $regex: searchTerm,
+                    $options: "i",
+                  },
+                },
+                {
+                  "user.lastName": {
+                    $regex: searchTerm,
+                    $options: "i",
+                  },
+                },
+                {
+                  "user.customUserId": {
+                    $regex: searchTerm,
+                    $options: "i",
+                  },
+                },
+                {
+                  "user.country": {
+                    $regex: searchTerm,
+                    $options: "i",
+                  },
+                },
+              ],
+            }
+          : {},
+      },
+    ];
+
+    const customers = await Sell.aggregate(pipeline);
+
+    /* -----------------------------
+       📄 Pagination
+    ------------------------------*/
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const paginated = customers.slice(skip, skip + limit);
+
+    /* -----------------------------
+       ✅ Response
+    ------------------------------*/
+    return res.status(200).json({
+      success: true,
+      data: paginated.map((c: any) => ({
+        _id: c._id,
+        name: `${c.user.firstName} ${c.user.lastName || ""}`.trim(),
+        email: c.user.email,
+        phone: c.user.phone,
+        country: c.user.country,
+        customUserId: c.user.customUserId,
+        firstPurchaseAt: c.firstPurchaseAt, // ⭐ new member indicator
+        totalTransactions: c.totalTransactions,
+        totalPointsEarned: c.totalPointsEarned,
+        totalPointsRedeemed: c.totalPointsRedeemed,
+        totalBilled: c.totalBilled,
+        finalBilled: c.finalBilled,
+      })),
+      pagination: {
+        page,
+        limit,
+        total: customers.length,
+        totalPage: Math.ceil(customers.length / limit),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in getNewMerchantCustomersList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+
+
+
+
+const exportMerchantCustomersExcel = catchAsync(
+  async (req: Request, res: Response) => {
+    const merchant = req.user as { _id: string };
+
+    if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
+      return res.status(401).json({ success: false, message: "Unauthorized merchant" });
+    }
+
+    const merchantId = merchant._id;
+
+    const period = req.query.period as string;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let dateFilter: any = {};
+    if (period === "day") {
+      dateFilter = { createdAt: { $gte: today } };
+    } else if (period === "week") {
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      dateFilter = { createdAt: { $gte: startOfWeek } };
+    } else if (period === "month") {
+      const startOfMonth = new Date(today);
+      startOfMonth.setDate(1);
+      dateFilter = { createdAt: { $gte: startOfMonth } };
+    }
+
+    const query = Sell.find({ merchantId, status: "completed", ...dateFilter });
+
+    const qb = new QueryBuilder(query, req.query)
+      .filter()
+      .search(["userId.firstName", "userId.lastName"])
+      .sort()
+      .populate(["userId", "digitalCardId", "merchantId"], {
+        userId: "firstName lastName email phone profile customUserId country",
+        digitalCardId: "cardCode availablePoints tier createdAt",
+        merchantId: "businessName shopName firstName",
+      });
+
+    const sales = await qb.modelQuery.lean();
+
+    const userIds = [
+      ...new Set(
+        sales.map((tx: any) => tx.userId?._id?.toString()).filter(Boolean)
+      ),
+    ];
+
+    const ratings = await Rating.find({ merchantId, userId: { $in: userIds } })
+      .select("userId rating comment")
+      .lean();
+
+    const ratingMap: Record<string, any> = {};
+    ratings.forEach((r: any) => {
+      ratingMap[r.userId.toString()] = r;
+    });
+
+    const userMap: Record<string, any> = {};
+    sales.forEach((tx: any) => {
+      const user = tx.userId;
+      if (!user?._id) return;
+
+      const userId = user._id.toString();
+
+      if (!userMap[userId]) {
+        userMap[userId] = {
+          UserID: userId,
+          Name: `${user.firstName} ${user.lastName || ""}`.trim(),
+          Email: user.email,
+          Phone: user.phone,
+          Country: user.country,
+          CustomID: user.customUserId || "",
+          TotalTransactions: 0,
+          TotalPointsEarned: 0,
+          TotalPointsRedeemed: 0,
+          TotalBilled: 0,
+          FinalBilled: 0,
+          AvailablePoints: tx.digitalCardId?.availablePoints || 0,
+          Tier: tx.digitalCardId?.tier || "",
+          CreatedAt: tx.digitalCardId?.createdAt || null,
+          SalesRep:
+            tx.merchantId?.businessName ||
+            tx.merchantId?.shopName ||
+            tx.merchantId?.firstName ||
+            "",
+          Rating: ratingMap[userId]?.rating || null,
+          RatingComment: ratingMap[userId]?.comment || null,
+        };
+      }
+
+      userMap[userId].TotalTransactions += 1;
+      userMap[userId].TotalPointsEarned += tx.pointsEarned || 0;
+      userMap[userId].TotalPointsRedeemed += tx.pointRedeemed || 0;
+      userMap[userId].TotalBilled += tx.totalBill || 0;
+      userMap[userId].FinalBilled += tx.discountedBill || 0;
+    });
+
+    const customers = Object.values(userMap);
+
+    // ===== Excel Workbook =====
+    const workbook = new ExcelJ.Workbook();
+    workbook.creator = "Your Company Name";
+    workbook.created = new Date();
+
+    // ===== Single Sheet: Customers + Summary =====
+    const sheet = workbook.addWorksheet("Customers");
+
+    sheet.columns = [
+      { header: "User ID", key: "UserID", width: 28 },
+      { header: "Name", key: "Name", width: 25 },
+      { header: "Email", key: "Email", width: 30 },
+      { header: "Phone", key: "Phone", width: 18 },
+      { header: "Country", key: "Country", width: 18 },
+      { header: "Custom ID", key: "CustomID", width: 20 },
+      { header: "Total Transactions", key: "TotalTransactions", width: 18 },
+      { header: "Points Earned", key: "TotalPointsEarned", width: 18 },
+      { header: "Points Redeemed", key: "TotalPointsRedeemed", width: 18 },
+      { header: "Total Billed", key: "TotalBilled", width: 18 },
+      { header: "Final Billed", key: "FinalBilled", width: 18 },
+      { header: "Available Points", key: "AvailablePoints", width: 18 },
+      { header: "Tier", key: "Tier", width: 15 },
+      { header: "Created At", key: "CreatedAt", width: 20 },
+      { header: "Sales Rep", key: "SalesRep", width: 25 },
+      { header: "Rating", key: "Rating", width: 10 },
+      { header: "Rating Comment", key: "RatingComment", width: 30 },
+    ];
+
+    customers.forEach((c) => {
+      sheet.addRow({
+        ...c,
+        CreatedAt: c.CreatedAt ? new Date(c.CreatedAt).toLocaleString() : "",
+      });
+    });
+
+    sheet.getRow(1).font = { bold: true };
+    sheet.autoFilter = "A1:Q1";
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=merchant_customers.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.send(buffer);
+  }
+);
 
 export default {
   checkout,
@@ -516,6 +972,8 @@ export default {
   getPointsHistory,
   getMerchantSales,
   getMerchantCustomersList,
-  getUserFullTransactions
+  getRecentMerchantCustomersList,
+  getUserFullTransactions,
+  exportMerchantCustomersExcel
   // finalizeCheckout
 };

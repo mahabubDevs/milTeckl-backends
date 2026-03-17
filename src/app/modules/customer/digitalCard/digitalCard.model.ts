@@ -45,6 +45,11 @@ const digitalCardSchema = new Schema(
         usedAt: {
           type: Date,
         },
+        promoCode: {
+        type: String,
+        unique: true, // optional (but recommended)
+        //  sparse: true,
+      },
       },
     ],
     

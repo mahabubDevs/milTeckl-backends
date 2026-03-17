@@ -14,22 +14,15 @@ import { createUniqueReferralId } from "../../../util/generateRefferalId";
 import QueryBuilder from "../../../util/queryBuilder";
 
 
-const ALLOWED_CREATOR_ROLES = [
-  USER_ROLES.USER,         // CUSTOMER
-  USER_ROLES.ADMIN_SELL, // VIEW MERCHANT
-  USER_ROLES.ADMIN,        // ADMIN
-  USER_ROLES.ADMIN_REP     // ADMIN_REP
-];
+
 
 // create user
-const createUserToDB = async (
-  payload: IUser,
-  creator?: any // logged-in user (merchant or admin)
-) => {
+const createUserToDB = async (payload: IUser, creator?: any) => {
   if (!payload.email) throw new ApiError(400, "Email is required");
   if (!payload.phone) throw new ApiError(400, "Phone number is required");
   if (!payload.password) throw new ApiError(400, "Password is required");
 
+  // ✅ Email / phone check
   const isEmailExist = await User.isExistUserByEmail(payload.email);
   if (isEmailExist) throw new ApiError(400, "Email already exists");
 
@@ -37,14 +30,13 @@ const createUserToDB = async (
   if (isPhoneExist) throw new ApiError(400, "Phone already exists");
 
   const ALLOWED_CREATOR_ROLES = [
-    USER_ROLES.USER,
-    USER_ROLES.VIEW_MERCENT,
+    USER_ROLES.ADMIN_SELL,
+    USER_ROLES.VIEW_ADMIN,
     USER_ROLES.ADMIN,
     USER_ROLES.ADMIN_REP
   ];
 
-  // 🔐 Role validation
-  let role = USER_ROLES.USER; // default CUSTOMER
+  let role = USER_ROLES.VIEW_ADMIN;
   if (payload.role) {
     if (!ALLOWED_CREATOR_ROLES.includes(payload.role as USER_ROLES)) {
       throw new ApiError(400, "User can only be created with allowed roles");
@@ -58,7 +50,7 @@ const createUserToDB = async (
   const userData = {
     ...payload,
     role,
-    merchantId: creator?.role?.startsWith("MERCHANT") ? creator.id : null,
+    // merchantId: creator?.role?.startsWith("MERCHANT") ? creator._id : null, // ✅ ObjectId pass
     customUserId,
     referenceId,
     verified: true,
@@ -69,9 +61,13 @@ const createUserToDB = async (
 };
 
 
+enum APPROVE_STATUS {
+  APPROVED = "approved",
+  PENDING = "pending",
+}
 
 
-const createMerchantToDB = async (payload: any) => {
+const createMerchantToDB = async (payload: any, creatorUser: any) => {
   // required check
   if (!payload.email) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Email is required");
@@ -94,11 +90,9 @@ const createMerchantToDB = async (payload: any) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "Phone already exists");
   }
 
-
   const referenceId = await createUniqueReferralId();
   const customerId = await generateCustomUserId(USER_ROLES.MERCENT);
 
-  // 🔥 merchant data (any use, model change না করে)
   const merchantData: any = {
     ...payload,
 
@@ -108,9 +102,9 @@ const createMerchantToDB = async (payload: any) => {
     verified: true,
 
     customUserId: customerId,
-    referenceId: referenceId,
+    referenceId,
 
-    // merchant specific (extra field — TS safe)
+    // merchant specific
     businessName: payload.businessName,
     subscription: payload.subscriptionType,
     lastPaymentDate: payload.lastPaymentDate,
@@ -120,23 +114,44 @@ const createMerchantToDB = async (payload: any) => {
     city: payload.city,
   };
 
+  // ✅ ONLY super_admin auto approve
+  if (creatorUser.role === USER_ROLES.SUPER_ADMIN) {
+    merchantData.approveStatus = APPROVE_STATUS.APPROVED;
+  }
+
   const result = await User.create(merchantData);
   return result;
 };
 
-// get all users
-const getAllUsersFromDB = async (requestingUserRole: string) => {
-  // শুধু admin type users দেখবে
-  const adminRoles = ["ADMIN", "ADMIN_SEL", "ADMIN_REP"];
 
-  if (!adminRoles.includes(requestingUserRole)) {
-    // যদি non-admin কেউ API call করে → forbidden
-    throw new ApiError(StatusCodes.FORBIDDEN, "Access denied");
+// get all users
+// Service
+const getAllUsersFromDB = async (requestingUserRole: string, query: Record<string, any>) => {
+  // অনুমোদিত roles
+  const allowedRoles = ["ADMIN", "ADMIN_SELL", "ADMIN_REP", "SUPER_ADMIN", "MANAGER", "VIEW_ADMIN"];
+
+  if (!allowedRoles.includes(requestingUserRole)) {
+    throw new ApiError(403, "Access denied");
   }
 
-  // সব admin type users দেখাবে
-  const users = await User.find({ role: { $in: adminRoles } }).select("-password");
-  return users;
+  // Base query
+  let baseQuery = User.find({ role: { $in: allowedRoles } });
+
+  // QueryBuilder instance
+  const qb = new QueryBuilder(baseQuery, query)
+    .search(["firstName", "lastName", "email", "phone"]) // search
+    .filter() // filter
+    .sort() // sort
+    .paginate() // pagination
+    .fields(); // fields select
+
+  // Execute query
+  const users = await qb.modelQuery.lean();
+
+  // Pagination info
+  const pagination = await qb.getPaginationInfo();
+
+  return { users, pagination };
 };
 
 

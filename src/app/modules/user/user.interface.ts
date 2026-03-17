@@ -16,18 +16,33 @@ export interface IStripeAccountInfo {
 export interface IAuthenticationProps {
   isResetPassword?: boolean;
 
-  // Email OTP
+  // ✅ Identify OTP channel
+  resetVia?: "phone" | "email";
+
+  // ✅ Generic OTP (used for signup / forgot)
+  resetOTP?: {
+    code?: number;
+    expireAt?: Date;
+  };
+
+  // 🔹 Email OTP (existing - keep)
   emailOTP?: {
     code?: number;
     expireAt?: Date;
   };
 
-  // Phone OTP
+  // 🔹 Phone OTP (existing - keep)
   phoneOTP?: {
     code?: number;
     expireAt?: Date;
   };
 }
+
+
+
+
+
+
 
 // export interface IUserPreferences {
 //   datingIntentions?: ("Life partner" | "Long-Term Relationship" | "Short-time Relationship" | "Does Not Matter")[];
@@ -100,22 +115,29 @@ export interface IUser {
   lastName?: string;
   businessName?: string;
   appId?: string;
+  latestToken?: string;
   fcmToken?: string;
   referenceId: string;
   referredInfo?: {
     referredId: string;
     referredBy: string;
+    referredUserId?: Types.ObjectId;
   };
   salesRep?: string;
   role?: string;
   phone?: string;
   email?: string;
   password?: string;
+  googleId?: string;
+  appleId?: string;
+  authProviders: string[];
   website?: string;
   country?: string;
   city?: string;
   service?: string;
   subscription?: string;
+  isUserWaiting?: boolean;
+  paymentStatus?: string;
   prefreances?: string[];
   about?: string;
   address?: string;
@@ -138,7 +160,26 @@ export interface IUser {
   lastActive: Date;
   socketIds: string[];
   points: number;
+  redeem: number;
   totalVisits: number;
+  hasViewedReferral: boolean;
+  notificationSettings?: {
+    promotionalEmails: boolean;
+    appNotifications: boolean;
+    smsNotifications: boolean;
+    referralNotifications: boolean;
+    subscriptionNotifications: boolean;
+    pushNotifications: boolean;
+  };
+  previousPasswords?: {
+    hash: string;
+    changedAt: Date;
+  }[];
+
+
+  // 🔹 Add these fields
+  isRootMerchant?: boolean;
+  isSubMerchant?: boolean;
 }
 
 export type UserModal = {
@@ -147,6 +188,7 @@ export type UserModal = {
   isExistUserByPhone(phone: string): any;
   isAccountCreated(id: string): any;
   isMatchPassword(password: string, hashPassword: string): boolean;
+  
 } & Model<IUser>;
 
 

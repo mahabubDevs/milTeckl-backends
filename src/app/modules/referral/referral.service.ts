@@ -7,8 +7,14 @@ import { StatusCodes } from "http-status-codes";
 import ApiError from "../../../errors/ApiErrors";
 
 const getMyReferredUser = async (userId: string) => {
+
+      // ✅ Mark referral page as viewed
+ await User.updateOne(
+  { _id: userId, hasViewedReferral: false },  
+  { $set: { hasViewedReferral: true } }
+);
     // 1. Get current user's location
-    const currentUser = await User.findById(userId).select("location referenceId");
+    const currentUser = await User.findById(userId).select("location referenceId points");
     if (!currentUser) throw new ApiError(StatusCodes.BAD_REQUEST, "User not found");
 
     const currentLocation = currentUser?.location?.coordinates;
@@ -29,27 +35,32 @@ const getMyReferredUser = async (userId: string) => {
         { $unwind: "$user" },
 
         // Sum points earned from this referral
-        {
-            $lookup: {
-                from: "pointtransactions",
-                let: { referralId: "$_id", userId: "$user._id" },
-                pipeline: [
-                    {
-                        $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ["$referral", "$$referralId"] },
-                                    { $eq: ["$user", "$$userId"] },
-                                    { $eq: ["$type", "EARN"] },
-                                ],
-                            },
-                        },
-                    },
-                    { $group: { _id: null, totalPoints: { $sum: "$points" } } },
-                ],
-                as: "points",
+       {
+        $lookup: {
+            from: "pointtransactions",
+            let: { referralId: "$_id" },
+            pipeline: [
+            {
+                $match: {
+                $expr: {
+                    $and: [
+                    { $eq: ["$referral", "$$referralId"] },
+                    { $eq: ["$type", "EARN"] }
+                    ]
+                }
+                }
             },
-        },
+            {
+                $group: {
+                _id: null,
+                totalPoints: { $sum: "$points" }
+                }
+            }
+            ],
+            as: "points"
+        }
+        }
+        ,
         {
             $addFields: {
                 pointsEarned: { $ifNull: [{ $arrayElemAt: ["$points.totalPoints", 0] }, 0] },
@@ -123,7 +134,7 @@ const getMyReferredUser = async (userId: string) => {
 
     // 3. Totals
     const totalReferrals = referrals.length;
-    const totalPoints = referrals.reduce((acc, r) => acc + r.pointsEarned, 0);
+    const totalPoints = currentUser.points;
     const totalJoin = referrals.filter(r => r.user).length;
     const myReferenceId = currentUser.referenceId
     return { referrals, totalReferrals, totalPoints, totalJoin, myReferenceId };

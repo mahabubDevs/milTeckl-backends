@@ -5,11 +5,12 @@ import ApiError from "../../../errors/ApiErrors";
 import QueryBuilder from "../../../util/queryBuilder";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
+import { generateCustomUserId } from "../user/user.utils";
 
 
 
 const ALLOWED_MERCHANT_ROLES = [
-  USER_ROLES.MERCENT,
+  USER_ROLES.ADMIN_MERCENT,
   USER_ROLES.VIEW_MERCENT,
 ];
 
@@ -17,59 +18,127 @@ const createUserToDB = async (
   payload: Partial<IUser>,
   loggedInUser: any
 ) => {
-  // 🔒 Ownership
+  console.log("🚀 createUserToDB called with payload:", payload);
+  console.log("👤 Logged-in user:", loggedInUser);
+
+  // 🔐 Only Merchant or Admin Merchant can create users
+  if (loggedInUser.role !== USER_ROLES.MERCENT && loggedInUser.role !== USER_ROLES.ADMIN_MERCENT) {
+    throw new ApiError(403, "Only merchant or admin merchant can create users");
+  }
+
+  // 🔒 Ownership (main merchant set করা)
+  if (loggedInUser.role === USER_ROLES.MERCENT) {
+    // মূল Merchant
+    payload.merchantId = loggedInUser._id;
+  } else if (loggedInUser.role === USER_ROLES.ADMIN_MERCENT) {
+    // Admin Merchant হলে, মূল Merchant কে assign
+    payload.merchantId = loggedInUser.merchantId;
+  }
+
   payload.createdBy = loggedInUser._id;
-  payload.merchantId = loggedInUser.id;
+  payload.isSubMerchant = true;
+
+  console.log("🔑 Ownership fields set:", {
+    createdBy: payload.createdBy,
+    merchantId: payload.merchantId,
+    isSubMerchant: payload.isSubMerchant,
+  });
 
   // 🔒 Role validation
   if (payload.role) {
     if (!ALLOWED_MERCHANT_ROLES.includes(payload.role as USER_ROLES)) {
+      console.log("❌ Invalid role provided:", payload.role);
       throw new ApiError(
         400,
-        "Merchant can only create MERCENT or VIEW_MERCENT users"
+        "Merchant can only create ADMIN_MERCENT or VIEW_MERCENT users"
       );
     }
   } else {
-    // default role
     payload.role = USER_ROLES.VIEW_MERCENT;
   }
+  console.log("🛡 Role set:", payload.role);
 
-  // 🔒 Status default
+  // 🔒 Default values
   payload.status = USER_STATUS.ACTIVE;
-
-  // 🔒 Verify automatically true
   payload.verified = true;
+  payload.isRootMerchant = false;
+  console.log("⚙ Default values set:", {
+    status: payload.status,
+    verified: payload.verified,
+    isRootMerchant: payload.isRootMerchant,
+  });
+
+  // ✅ Generate customUserId
+  payload.customUserId = await generateCustomUserId(USER_ROLES.MERCENT);
+  console.log("🆔 Generated customUserId:", payload.customUserId);
+
+  // ✅ Generate referenceId
+  if (!payload.referenceId) {
+    payload.referenceId = `REF-${Math.floor(10000 + Math.random() * 90000)}`;
+  }
+  console.log("🔖 Reference ID:", payload.referenceId);
+
+  // 📝 Fetch merchant info from DB and auto-populate fields
+  const merchantFromDB = await User.findById(payload.merchantId).lean();
+  if (!merchantFromDB) {
+    throw new ApiError(404, "Merchant not found in database");
+  }
+
+  const infoFields = [
+    "address",
+    "businessName",
+    "city",
+    "country",
+    "service",
+    "about",
+    "website",
+    "photo",
+    "profile",
+  ];
+
+  infoFields.forEach((field) => {
+    if ((merchantFromDB as any)[field] !== undefined) {
+      (payload as any)[field] = (merchantFromDB as any)[field];
+    }
+  });
+
+  console.log("🏢 Info fields populated from merchant DB:", 
+    infoFields.reduce((acc, f) => {
+      acc[f] = (payload as any)[f];
+      return acc;
+    }, {} as any)
+  );
 
   const user = await User.create(payload);
+  console.log("✅ User created:", user);
+
   return user.toObject();
 };
-
 // ---------------- Get Users By Merchant ----------------
 const getUsersByMerchant = async (loggedInUser: any, query: Record<string, any>) => {
-  const creatorId = loggedInUser.id || loggedInUser._id;
+  const mainMerchantId =
+    loggedInUser.role === USER_ROLES.MERCENT
+      ? loggedInUser._id
+      : loggedInUser.merchantId; // যদি admin হয়, তার main merchant
 
-  if (!creatorId) {
+  if (!mainMerchantId) {
     throw new ApiError(400, "Invalid logged in user");
   }
 
-  // Initialize QueryBuilder with base query
+  // এখন query: merchantId = mainMerchantId
   const queryBuilder = new QueryBuilder(
-    User.find({ createdBy: creatorId }).lean(),
+    User.find({ merchantId: mainMerchantId }).lean(),
     query
   );
 
-  // Apply query features
   queryBuilder
-    .search(['name', 'email']) // Add other searchable fields if needed
+    .search(['firstName', 'email']) // name field বদলে firstName
     .filter()
     .sort()
     .fields()
     .paginate();
 
-  // Execute query
   const users = await queryBuilder.modelQuery;
-
-  // Get pagination info
   const paginationInfo = await queryBuilder.getPaginationInfo();
 
   return { users, paginationInfo };
@@ -133,14 +202,47 @@ const updateUser = async (
 };
 
 // ---------------- Delete User ----------------
- const deleteUser = async (userId: string, loggedInUser: any) => {
-  const filter: any = { _id: userId };
-  if (loggedInUser.role === USER_ROLES.MERCENT) filter.merchantId = loggedInUser.id;
+const deleteUser = async (userId: string, loggedInUser: any) => {
+  console.log("===== deleteUser START =====");
+  console.log("Requested userId to delete:", userId);
+  console.log("Logged in user:", loggedInUser);
 
+  // 1️⃣ Initialize filter
+  const filter: any = { _id: userId };
+
+  // 2️⃣ MERCENT role হলে merchantId fetch
+  let merchantId: string | null = null;
+  if (loggedInUser.role === USER_ROLES.MERCENT) {
+    const merchant = await User.findById(loggedInUser._id).select("merchantId");
+    merchantId = merchant?.merchantId?.toString() || null;
+    console.log("Fetched merchantId from DB:", merchantId);
+
+    if (!merchantId) {
+      console.warn(
+        "⚠️ MERCENT user has no merchantId, cannot delete other users safely"
+      );
+    } else {
+      filter.merchantId = merchantId;
+      console.log("Applying merchantId filter:", merchantId);
+    }
+  }
+
+  console.log("Final filter for deletion:", filter);
+
+  // 3️⃣ Delete user
   const deleted = await User.findOneAndDelete(filter);
-  if (!deleted) throw new ApiError(404, "User not found or not authorized");
+
+  if (!deleted) {
+    console.log("❌ No user found or not authorized to delete");
+    throw new ApiError(404, "User not found or not authorized");
+  }
+
+  console.log("✅ User deleted successfully:", deleted._id);
+  console.log("===== deleteUser END =====");
   return true;
 };
+
+
 
 // ---------------- Toggle Active/Inactive ----------------
 const toggleUserStatus = async (userId: string, loggedInUser: any) => {

@@ -13,7 +13,10 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       ref: "Package",
       required: true,
     },
-    adminName: {
+    salesRepName: {
+      type: String,
+    },
+    salesRepReferralId: {
       type: String,
     },
     acknowledged: {
@@ -33,6 +36,14 @@ const salesRepSchema = new Schema<ISalesRep, SalesRepModel>(
       type: String,
       enum: ["paid", "unpaid", "expired"],
       default: "unpaid",
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["active", "inActive"],
+      default: "inActive",
+    },
+    subscriptionStatusChangedDate: {
+      type: Date,
     },
     price: {
       type: Number,

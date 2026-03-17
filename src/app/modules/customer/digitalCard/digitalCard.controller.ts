@@ -142,18 +142,21 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
 
   const user = req.user as IUser;
 
-  // 🛑 Role check (FIXED)
-  if (user.role !== "MERCENT") {
+  // 🛑 Role check (Merchant OR Sub-Merchant allowed)
+  if (user.role !== "MERCENT" && !user.isSubMerchant) {
     return sendResponse(res, {
       statusCode: StatusCodes.FORBIDDEN,
       success: false,
-      message: "Only merchant can access this",
+      message: "Only merchant or merchant staff can access this",
     });
   }
 
-  // 🆔 Merchant ID check
-  const merchantId = user._id?.toString();
-  if (!merchantId) {
+  // ✅ APPLY REQUESTED LOGIC
+  const filterId = user.isSubMerchant
+    ? user.merchantId
+    : user._id;
+
+  if (!filterId) {
     return sendResponse(res, {
       statusCode: StatusCodes.BAD_REQUEST,
       success: false,
@@ -173,7 +176,7 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
   // 🔍 Search digital card (cardCode OR promotionCode)
   const digitalCard =
     await DigitalCardService.getMerchantDigitalCardWithPromotions(
-      merchantId,
+      filterId.toString(),
       cardCode
     );
 
@@ -181,7 +184,7 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
     return sendResponse(res, {
       statusCode: StatusCodes.NOT_FOUND,
       success: false,
-      message: "No Digital Card with valid promotions found",
+      message: "No Digital Card for this customer found",
     });
   }
 
@@ -244,11 +247,52 @@ const getMerchantDigitalCard = catchAsync(async (req, res) => {
 //   }
 // );
 
+
+const createOrGetUserDigitalCard = catchAsync(async (req, res) => {
+  if (!req.user) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.UNAUTHORIZED,
+      success: false,
+      message: "User not authenticated",
+    });
+  }
+
+  const user = req.user as any; // auth থেকে user info
+  const userId = (user._id as Types.ObjectId).toString();
+
+  const { merchantId } = req.body;
+  if (!merchantId) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "merchantId is required",
+    });
+  }
+
+  // Service call → check & create if not exist
+  const digitalCard = await DigitalCardService.createOrGetDigitalCard(userId, merchantId);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Digital card fetched/created successfully",
+    data: {
+      cardId: digitalCard._id,
+      cardCode: digitalCard.cardCode,
+      promotions: digitalCard.promotions,
+      merchantId: digitalCard.merchantId,
+      userId: digitalCard.userId,
+    },
+  });
+});
+
+
 export const DigitalCardController = {
   addPromotion,
   getUserAddedPromotions,
   getUserDigitalCards,
   getDigitalCardPromotions,
   getMerchantDigitalCard,
+  createOrGetUserDigitalCard,
   //   approvePromotion
 };

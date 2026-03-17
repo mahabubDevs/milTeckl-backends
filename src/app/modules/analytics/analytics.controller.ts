@@ -9,7 +9,13 @@ import { generateExcelBuffer } from "../../../helpers/excelExport";
 // User creates report
 const getBusinessCustomerAnalytics = catchAsync(
   async (req: Request, res: Response) => {
-    const merchantId = (req.user as any)._id;
+    const user = req.user as any;
+
+    const merchantId = user._id;
+    const role = user.role;
+    const isSubMerchant = user.isSubMerchant;
+    const mainMerchantId = user.merchantId?.toString();
+
     const {
       startDate,
       endDate,
@@ -18,6 +24,8 @@ const getBusinessCustomerAnalytics = catchAsync(
       subscriptionStatus,
       customerName,
       location,
+      city,
+      paymentStatus
     } = req.query;
 
     const result = await AnalyticsService.getBusinessCustomerAnalytics(
@@ -30,7 +38,12 @@ const getBusinessCustomerAnalytics = catchAsync(
         subscriptionStatus: subscriptionStatus as string,
         customerName: customerName as string,
         location: location as string,
-      }
+        city: city as string,
+        paymentStatus: paymentStatus as string,
+      },
+      role,
+      isSubMerchant,
+      mainMerchantId
     );
 
     sendResponse(res, {
@@ -42,6 +55,7 @@ const getBusinessCustomerAnalytics = catchAsync(
     });
   }
 );
+
 
 
 const exportBusinessCustomerAnalytics = catchAsync(
@@ -84,6 +98,55 @@ const exportBusinessCustomerAnalytics = catchAsync(
 
 
 
+// const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
+//   const {
+//     startDate,
+//     endDate,
+//     page = "1",
+//     limit = "10",
+//     subscriptionStatus,
+//     merchantName,
+//     location,
+//     paymentStatus,
+//     city,
+//     customerName,
+//   } = req.query;
+
+//   console.log("Query received:", req.query); // <-- log incoming query
+
+//   const userRole = (req.user as any)?.role;
+//   console.log("User role:", userRole);
+
+//   const result = await AnalyticsService.getMerchantAnalytics(
+//     startDate as string,
+//     endDate as string,
+//     Number(page),
+//     Number(limit),
+//     {
+//       subscriptionStatus: subscriptionStatus as string,
+//       merchantName: merchantName as string,
+//       location: location as string,
+//       paymentStatus: paymentStatus as string,
+//       city: city as string,
+//       customerName: customerName as string,
+//     },
+//     userRole
+//   );
+
+//   console.log("Analytics result:", result); // <-- log full result
+
+//   sendResponse(res, {
+//     success: true,
+//     statusCode: StatusCodes.OK,
+//     message: "Merchant analytics fetched successfully",
+//     data: result.data,
+//     pagination: result.pagination,
+//   });
+// });
+
+
+
+
 const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
   const {
     startDate,
@@ -91,9 +154,26 @@ const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
     page = "1",
     limit = "10",
     subscriptionStatus,
-    merchantName,
+    customerName,
     location,
+    paymentStatus,
+    city
   } = req.query;
+
+  console.log("Controller - Received query:", {
+    startDate,
+    endDate,
+    subscriptionStatus,
+    customerName,
+    location,
+    paymentStatus,
+    city
+  });
+
+  const userRole = (req.user as any)?.role;
+  const merchantId = (req.user as any)?._id;
+
+  console.log("Controller - User role:", userRole, "Merchant ID:", merchantId);
 
   const result = await AnalyticsService.getMerchantAnalytics(
     startDate as string,
@@ -102,19 +182,32 @@ const getMerchantAnalytics = catchAsync(async (req: Request, res: Response) => {
     Number(limit),
     {
       subscriptionStatus: subscriptionStatus as string,
-      merchantName: merchantName as string,
+      customerName: customerName as string,
       location: location as string,
-    }
+      paymentStatus: paymentStatus as string,
+      city: city as string
+    },
+    userRole,
+    // merchantId
+  );
+
+  console.log(
+    "Controller - Records Fetched:", result.data.records.length,
+    "Total Records Count:", result.pagination.total
   );
 
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
-    message: "Merchant analytics fetched successfully",
+    message: "Merchant customer analytics fetched successfully",
     data: result.data,
     pagination: result.pagination,
   });
 });
+
+
+
+
 
 const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
   const {
@@ -125,7 +218,23 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
     subscriptionStatus,
     customerName,
     location,
+    paymentStatus,
+    city
   } = req.query;
+
+  console.log("Controller - Received query:", {
+    startDate,
+    endDate,
+    subscriptionStatus,
+    customerName,
+    location,
+    paymentStatus,
+    city
+   });
+
+  // Get logged-in user role
+  const userRole = (req.user as any)?.role;
+  console.log("Controller - User Role:", userRole);
 
   const result = await AnalyticsService.getCustomerAnalytics(
     startDate as string,
@@ -136,7 +245,23 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
       subscriptionStatus: subscriptionStatus as string,
       customerName: customerName as string,
       location: location as string,
-    }
+      paymentStatus: paymentStatus as string,
+      city: city as string
+    },
+    userRole // pass role
+  );
+
+  console.log(
+    "Records Fetched:",
+    result.data.records.length,
+    "Total Records Count:",
+    result.pagination.total
+  );
+  console.log(
+    "Monthly Data Count:",
+    result.data.monthlyData.length,
+    "Sensitive fields masked:",
+    userRole === "VIEW_ADMIN"
   );
 
   sendResponse(res, {
@@ -148,6 +273,73 @@ const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
+
+
+// const getCustomerAnalytics = catchAsync(async (req: Request, res: Response) => {
+//   const {
+//     startDate,
+//     endDate,
+//     page = "1",
+//     limit = "10",
+//     subscriptionStatus,
+//     customerName,
+//     location,
+//     paymentStatus,
+//     city,
+//   } = req.query;
+
+//   console.log("Controller - Received query:", {
+//     startDate,
+//     endDate,
+//     subscriptionStatus,
+//     customerName,
+//     location,
+//     paymentStatus,
+//     city
+//   });
+
+//   // Get logged-in user role
+//   const userRole = (req.user as any)?.role;
+//   console.log("Controller - User Role:", userRole);
+
+//   // ---------------- Normalize paymentStatus ----------------
+//   const normalizedPaymentStatus = paymentStatus ? (paymentStatus as string).toLowerCase() : undefined;
+
+//   console
+
+//   const result = await AnalyticsService.getCustomerAnalytics(
+//     startDate as string,
+//     endDate as string,
+//     Number(page),
+//     Number(limit),
+//     {
+//       subscriptionStatus: subscriptionStatus as string,
+//       customerName: customerName as string,
+//       location: location as string,
+//       paymentStatus: normalizedPaymentStatus, // small case send
+//       city: city as string
+//     },
+//     userRole
+//   );
+
+//   console.log(
+//     "Controller - Records Fetched:", result.data.records.length,
+//     "Total Records Count:", result.pagination.total
+//   );
+//   console.log(
+//     "Controller - Monthly Data Count:", result.data.monthlyData.length,
+//     "Sensitive fields masked:", userRole === "VIEW_ADMIN"
+//   );
+
+//   sendResponse(res, {
+//     success: true,
+//     statusCode: StatusCodes.OK,
+//     message: "Customer analytics fetched successfully",
+//     data: result.data,
+//     pagination: result.pagination,
+//   });
+// });
 
 const exportCustomerAnalytics = catchAsync(
   async (req: Request, res: Response) => {
@@ -183,15 +375,24 @@ const exportCustomerAnalytics = catchAsync(
 // controller.ts
 const exportMerchantAnalytics = catchAsync(
   async (req: Request, res: Response) => {
-    const { startDate, endDate, subscriptionStatus, merchantName, location } =
-      req.query;
+    const {
+      startDate,
+      endDate,
+      subscriptionStatus,
+      customerName,
+      location,
+      paymentStatus,
+      city
+    } = req.query;
 
     console.log("🚀 Export request received with filters:", {
       startDate,
       endDate,
       subscriptionStatus,
-      merchantName,
+      customerName,
       location,
+      paymentStatus,
+      city
     });
 
     // Export all filtered data
@@ -202,32 +403,34 @@ const exportMerchantAnalytics = catchAsync(
       0, // 0 = export all
       {
         subscriptionStatus: subscriptionStatus as string,
-        merchantName: merchantName as string,
+        customerName: customerName as string,
         location: location as string,
+        paymentStatus: paymentStatus as string,
+        city: city as string
       }
     );
 
     console.log("🔹 Aggregated records count:", result.records.length);
-
-    const records = result.records;
-
-    // Show first 5 records for debug
-    console.log("🔸 Sample records:", records.slice(0, 5));
+    console.log("🔸 Sample records:", result.records.slice(0, 5));
 
     const columns = [
-      { header: "Merchant Name", key: "merchantName" },
+      { header: "Business Name", key: "customerName" },
+      // { header: "Last Name", key: "lastName" },
+      { header: "Email", key: "email" },
+      { header: "Phone", key: "phone" },
       { header: "Location", key: "location" },
       { header: "Subscription Status", key: "subscriptionStatus" },
-      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Payment Status", key: "paymentStatus" },
+      { header: "Points Accumulated", key: "pointsAccumulated" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Users Count", key: "usersCount" },
-      { header: "Joining Date", key: "joiningDate" },
+      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Joining Date", key: "date" },
     ];
 
     const buffer = await generateExcelBuffer({
       sheetName: "Merchant Analytics",
       columns,
-      rows: records,
+      rows: result.records,
     });
 
     console.log("✅ Excel buffer generated, size:", buffer.length, "bytes");
@@ -308,41 +511,48 @@ const exportCustomerMonthlyData = catchAsync(
   async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
 
-    console.log("🚀 Customer Monthly export request:", { startDate, endDate });
+    console.log("🚀 Customer Records export request:", { startDate, endDate });
 
-    // ---------------- Fetch monthlyData ----------------
+    // -------- Fetch Records --------
     const result = await AnalyticsService.getCustomerAnalytics(
       startDate as string,
       endDate as string,
-      1, // page ignored
-      0, // limit 0 = all data
+      1,
+      0, // limit 0 = all records
       {}
     );
 
-    const monthlyData = result.data.monthlyData;
+    const records = result.data.records;
 
-    console.log("🔹 Monthly records count:", monthlyData.length);
-    console.log("🔸 Sample records:", monthlyData.slice(0, 5));
+    console.log("🔹 Records count:", records.length);
+    console.log("🔸 Sample records:", records.slice(0, 5));
 
-    // ---------------- Excel Columns ----------------
+    // -------- Excel Columns --------
     const columns = [
-      { header: "Year", key: "year" },
-      { header: "Month", key: "monthName" },
+      { header: "User ID", key: "userId" },
+      { header: "Custom ID", key: "customUserId" },
+      { header: "Customer Name", key: "customerName" },
+      { header: "Location", key: "location" },
+      { header: "Subscription Status", key: "subscriptionStatus" },
+      { header: "Payment Status", key: "paymentStatus" },
       { header: "Points Accumulated", key: "pointsAccumulated" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
+      { header: "Revenue", key: "totalRevenue" },
+      { header: "Date", key: "date" },
     ];
 
-    // ---------------- Generate Excel ----------------
+    // -------- Generate Excel --------
     const buffer = await generateExcelBuffer({
-      sheetName: "Customer Monthly Data",
+      sheetName: "Customer Records",
       columns,
-      rows: monthlyData,
+      rows: records,
     });
 
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=customer-monthly-data.xlsx`
+      `attachment; filename=customer-records.xlsx`
     );
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

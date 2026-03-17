@@ -29,7 +29,8 @@ const getSalesRepData = catchAsync(async (req: Request, res: Response) => {
 
 const updateUserAcknowledgeStatus = catchAsync(
   async (req: Request, res: Response) => {
-    await SalesRepService.updateUserAcknowledgeStatus(req.params.id);
+    const user = req.user as JwtPayload;
+    await SalesRepService.updateUserAcknowledgeStatus(req.params.id, user._id);
 
     sendResponse(res, {
       statusCode: StatusCodes.OK,
@@ -39,8 +40,8 @@ const updateUserAcknowledgeStatus = catchAsync(
   }
 );
 const generateToken = catchAsync(async (req: Request, res: Response) => {
-  const user = req.user as JwtPayload;
-  const result = await SalesRepService.generateToken(req.params.id, user._id);
+
+  const result = await SalesRepService.generateToken(req.params.id);
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
@@ -60,10 +61,36 @@ const validateToken = catchAsync(async (req: Request, res: Response) => {
     message: "Token validated  successfully",
   });
 });
+
+
+
+const activateAccount = catchAsync(async (req: Request, res: Response) => {
+  await SalesRepService.activateAccount(req.params.id);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Account activated successfully",
+  });
+});
+
+
+
+const deactivateAccount = catchAsync(async (req: Request, res: Response) => {
+  await SalesRepService.deactivateAccount(req.params.id);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Account deactivated successfully",
+  });
+});
 export const SalesRepController = {
   createSalesRepData,
   getSalesRepData,
   updateUserAcknowledgeStatus,
   generateToken,
   validateToken,
+  activateAccount,
+  deactivateAccount
 };

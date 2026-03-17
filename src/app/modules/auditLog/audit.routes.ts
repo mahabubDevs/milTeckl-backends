@@ -10,6 +10,11 @@ router.get(
   auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
   AuditController.getAuditLogs
 );
+router.get(
+  "/audit-log/tier",
+  auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  AuditController.getAuditLogTier
+);
 
 
 router.get(

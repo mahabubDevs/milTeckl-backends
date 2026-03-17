@@ -10,17 +10,15 @@ import ApiError from "../../../errors/ApiErrors";
 
 // create user
 const createUser = catchAsync(async (req: any, res: any) => {
-  const merchantId = req.user.id; // logged-in merchant
-console.log("🚀 Creating user under merchant:", req.body);
-  const result = await UserService.createUserToDB(
-    req.body,
-    merchantId
-  );
+  const creator = req.user; // logged-in merchant or admin
+  console.log("🚀 Creating user under merchant/admin:", req.body);
+
+  const result = await UserService.createUserToDB(req.body, creator);
 
   await AuditService.createLog(
-    req.user.email,
+    creator.email,
     "CREATE_USER",
-    `Merchant created user: ${result.email}`
+    `User created: ${result.email} by ${creator.email}`
   );
 
   sendResponse(res, {
@@ -34,7 +32,8 @@ console.log("🚀 Creating user under merchant:", req.body);
 
 
 const createMerchant = catchAsync(async (req: any, res: any) => {
-  const result = await UserService.createMerchantToDB(req.body);
+  const creator = req.user; // logged-in user creating the merchant
+  const result = await UserService.createMerchantToDB(req.body, creator);
 
   // Audit log
   await AuditService.createLog(
@@ -56,7 +55,9 @@ const createMerchant = catchAsync(async (req: any, res: any) => {
 // get all users
 const getAllUsers = catchAsync(async (req: Request, res: Response) => {
   const requestingUserRole = (req.user as any)?.role || "ADMIN";
-  const result = await UserService.getAllUsersFromDB(requestingUserRole);
+
+  // pass query params
+  const result = await UserService.getAllUsersFromDB(requestingUserRole, req.query);
 
   sendResponse(res, {
     success: true,
@@ -65,6 +66,7 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
 
 // get single user
 const getSingleUser = catchAsync(async (req: Request, res: Response) => {

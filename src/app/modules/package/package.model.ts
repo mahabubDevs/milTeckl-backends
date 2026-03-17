@@ -6,16 +6,17 @@ const packageSchema = new Schema<IPackage, PackageModel>({
     description: { type: String, required: true },
     price: { type: Number, required: true },
     duration: { type: String, enum: ['1 month', '4 months', '8 months', '1 year'], required: true },
-    paymentType: { type: String, enum: ['Monthly', 'Yearly'], required: true },
+    paymentType: { type: String, enum: ['Monthly', 'Yearly'], required: false },
     features: [{ type: String, required: true }],
     productId: { type: String, required: true },
     priceId: { type: String, required: true },
     loginLimit: { type: Number, required: true },
-    // paymentLink: { type: String, required: true },
     status: { type: String, enum: ['Active', 'Delete'], default: 'Active' },
     payoutAccountId: { type: String },
     admin: { type: Schema.Types.ObjectId, ref: "User", required: true },
     isFreeTrial: { type: Boolean, default: false },
+    priceIdWithPoints: { type: Object, default: {} } // <-- UPDATED
 }, { timestamps: true });
+
 
 export const Package = model<IPackage, PackageModel>("Package", packageSchema);

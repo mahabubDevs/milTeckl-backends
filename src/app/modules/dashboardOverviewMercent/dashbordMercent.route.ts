@@ -6,18 +6,19 @@ import validateRequest from "../../middlewares/validateRequest";
 
 import { DashboardMercentValidation } from "./dashboardMercent.validation";
 import { DashboardMercentController } from "./dashboardMercent.controller";
+import { canAccessMerchantProfile } from "../../middlewares/accessMerchentProfile";
 
 const router = Router();
 
 router.get(
   "/merchant-dashboard-report",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   DashboardMercentController.getMerchantReport
 );
 
 router.get(
   "/weekly-sell-report",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   DashboardMercentController.getWeeklySellReport
 );
 
@@ -28,12 +29,12 @@ router.get(
 );
 router.get(
   "/customer-chart",
-  auth(USER_ROLES.MERCENT ),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   DashboardMercentController.getCustomerChart
 );
 router.get(
   "/customer-chart-week",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.VIEW_MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   DashboardMercentController.getCustomerChartWeek
 );
 

@@ -25,27 +25,30 @@ import { Secret } from 'jsonwebtoken';
 // });
 
 
-const verifyPhone = catchAsync(async (req, res) => {
-  // OTP + phone number comes from request body
-  const result = await AuthService.verifyPhoneOtpToDB(req.body);
+const verifyOtp = catchAsync(async (req, res) => {
+    const result = await AuthService.verifyOtpToDB(req.body);
 
-  sendResponse(res, {
-    success: true,
-    statusCode: StatusCodes.OK,
-    message: result.message,
-    data: {
-      accessToken: result.accessToken,
-      resetToken: result.resetToken, // ✅ include reset token
-    },
-  });
+    sendResponse(res, {
+        success: true,
+        statusCode: StatusCodes.OK,
+        message: result.message,
+        data: {
+            accessToken: result.accessToken,
+            resetToken: result.resetToken,
+        },
+    });
 });
 
 
+
 const loginUser = catchAsync(async (req: Request, res: Response) => {
-    const { ...loginData } = req.body;
+    const loginData = req.body;
     console.log("Login Data Received:", loginData);
+
+    // ✅ Login and get accessToken + refreshToken
     const result = await AuthService.loginUserFromDB(loginData);
 
+    // 🔹 Response same as before
     sendResponse(res, {
         success: true,
         statusCode: StatusCodes.OK,
@@ -54,17 +57,20 @@ const loginUser = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
-const forgetPassword = catchAsync(async (req: Request, res: Response) => {
-    const phone = req.body.phone; // email এর পরিবর্তে phone
-    const result = await AuthService.forgetPasswordToDB(phone);
 
-    sendResponse(res, {
-        success: true,
-        statusCode: StatusCodes.OK,
-        message: 'Please check your phone, we sent an OTP!',
-        data: result
-    });
+const forgetPassword = catchAsync(async (req: Request, res: Response) => {
+  const { identifier } = req.body; // phone or email
+
+  const result = await AuthService.forgetPasswordToDB(identifier);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Please check your phone or email, we sent an OTP!',
+    data: result
+  });
 });
+
 
 
 const resetPassword = catchAsync(async (req: Request, res: Response) => {
@@ -85,7 +91,7 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
     if (!user) {
         throw new Error("User not authenticated");
     }
-    
+
     console.log("Step 1: User data", user);
     const { ...passwordData } = req.body;
     await AuthService.changePasswordToDB(user, passwordData);
@@ -152,68 +158,69 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
 });
 
 const deleteOwnUser = catchAsync(async (req: Request, res: Response) => {
-  // Step 1: Get logged-in user ID
-  const userId = req.user && (req.user as any)._id;
-  if (!userId) throw new ApiError(StatusCodes.BAD_REQUEST, "User ID missing in request token");
-  
-  // Step 2: Get password from request
-  const { password } = req.body;
-  if (!password) throw new ApiError(StatusCodes.BAD_REQUEST, "Password is required to delete account");
+    // Step 1: Get logged-in user ID
+    const userId = req.user && (req.user as any)._id;
+    if (!userId) throw new ApiError(StatusCodes.BAD_REQUEST, "User ID missing in request token");
 
-  console.log("Logged-in userId from token:", userId);
-  console.log("Password received for account deletion:", password);
+    // Step 2: Get password from request
+    const { password } = req.body;
+    if (!password) throw new ApiError(StatusCodes.BAD_REQUEST, "Password is required to delete account");
 
-  // Step 3: Call service
-  const result = await AuthService.deleteOwnUserAccount(userId, password);
+    console.log("Logged-in userId from token:", userId);
+    console.log("Password received for account deletion:", password);
 
-  // Step 4: Send response
-  sendResponse(res, {
+    // Step 3: Call service
+    const result = await AuthService.deleteOwnUserAccount(userId, password);
+
+    // Step 4: Send response
+    sendResponse(res, {
+        success: true,
+        statusCode: StatusCodes.OK,
+        message: "User account deleted successfully",
+        data: result
+    });
+});
+
+
+
+const resendOtp = catchAsync(async (req: Request, res: Response) => {
+  const { identifier } = req.body; // email or phone
+
+  if (!identifier) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Email or phone is required");
+  }
+
+  const result = await AuthService.resendOtpToDB(identifier);
+
+  res.status(StatusCodes.OK).json({
     success: true,
-    statusCode: StatusCodes.OK,
-    message: "User account deleted successfully",
+    message: `OTP resent successfully via ${result.via}`,
     data: result
   });
 });
 
 
 
-const sendPhoneOtp = catchAsync(async (req: Request, res: Response) => {
-    const { phone } = req.body;
-    console.log("Received phone number:", phone);
-
-    if (!phone) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "Phone number is required");
+const uploadDocumentImages = async (req: Request, res: Response) => {
+    const userId = req.user && (req.user as any)._id;
+    console.log("User ID from request:", userId);
+    if (!userId) {
+        throw new ApiError(400, 'User ID is required');
     }
 
-    // Call service directly
-    const result = await AuthService.sendPhoneOtpToDB(phone);
+    // req.files type assertion
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    if (!files || !files['image']) {
+        throw new ApiError(400, 'No images uploaded');
+    }
 
-    res.status(StatusCodes.OK).json({
+    const uploadedPaths = await AuthService.uploadDocumentImagesToDB(userId, files['image']);
+
+    res.status(200).json({
         success: true,
-        message: 'Phone OTP sent successfully',
-        data: result
+        message: 'Images uploaded successfully',
+        data: uploadedPaths,
     });
-});
-const uploadDocumentImages = async (req: Request, res: Response) => {
-  const userId = req.user && (req.user as any)._id;
-  console.log("User ID from request:", userId);
-    if (!userId) {
-    throw new ApiError(400, 'User ID is required');
-  }
-
-  // req.files type assertion
-  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  if (!files || !files['image']) {
-    throw new ApiError(400, 'No images uploaded');
-  }
-
-  const uploadedPaths = await AuthService.uploadDocumentImagesToDB(userId, files['image']);
-
-  res.status(200).json({
-    success: true,
-    message: 'Images uploaded successfully',
-    data: uploadedPaths,
-  });
 };
 
 
@@ -246,6 +253,18 @@ const archiveUser = catchAsync(async (req: Request, res: Response) => {
 });
 
 
+const googleLogin = catchAsync(async (req: Request, res: Response) => {
+    const { idToken, role } = req.body;
+    const result = await AuthService.googleLoginToDB(idToken, role);
+
+    sendResponse(res, {
+        success: true,
+        statusCode: StatusCodes.OK,
+        message: 'User login successfully',
+        data: result
+    });
+});
+
 
 export const AuthController = {
     // verifyEmail,
@@ -258,8 +277,9 @@ export const AuthController = {
     // socialLogin,
     deleteUser,
     deleteOwnUser,
-    sendPhoneOtp,
-    verifyPhone,
+    resendOtp,
+    verifyOtp,
     uploadDocumentImages,
-    archiveUser
+    archiveUser,
+    googleLogin
 };

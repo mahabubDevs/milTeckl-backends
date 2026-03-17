@@ -1,14 +1,26 @@
 import { Favorite } from "./favorite.model";
 import { Types } from "mongoose";
 
-const addFavorite = async (userId: string, merchantId: string) => {
-  const result = await Favorite.create({
+const toggleFavorite = async (userId: string, merchantId: string) => {
+  const existing = await Favorite.findOne({
     userId: new Types.ObjectId(userId),
     merchantId: new Types.ObjectId(merchantId),
   });
 
-  return result;
+  if (existing) {
+    // ✅ Remove favorite (unfavorite)
+    await existing.deleteOne();
+    return { isFavorite: false, merchantId };
+  } else {
+    // ✅ Add favorite
+    const newFav = await Favorite.create({
+      userId: new Types.ObjectId(userId),
+      merchantId: new Types.ObjectId(merchantId),
+    });
+    return { isFavorite: true, merchantId };
+  }
 };
+
 
 const getUserFavorites = async (userId: string) => {
   return await Favorite.find({
@@ -17,7 +29,7 @@ const getUserFavorites = async (userId: string) => {
     .populate({
       path: "merchantId", // Favorite model এ যেই ফিল্ডে userId reference আছে
       model: "User",      // User model থেকে populate করবে
-      select: "name email role" // শুধু দরকারি field দেখাবে
+      select: "firstName email role businessName" // শুধু দরকারি field দেখাবে
     })
     .sort({ createdAt: -1 });
 };
@@ -37,7 +49,7 @@ const removeFavorite = async (userId: string, merchantId: string) => {
 };
 
 export const FavoriteService = {
-  addFavorite,
+  toggleFavorite,
   getUserFavorites,
   removeFavorite,
 };

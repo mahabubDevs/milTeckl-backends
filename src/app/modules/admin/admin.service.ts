@@ -8,6 +8,9 @@ import { sendNotification } from "../../../helpers/notificationsHelper";
 import { NotificationType } from "../notification/notification.model";
 import ExcelJS from "exceljs";
 import { Types } from "mongoose";
+import { Favorite } from "../customer/favorite/favorite.model";
+import { Rating } from "../customer/rating/rating.model";
+import { sendPushNotification } from "../../../helpers/sendPushNotification";
 
 
 interface IQuery {
@@ -72,7 +75,7 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
   );
 
   const allCusomtersQuery = new QueryBuilder(baseQuery, query)
-    .search(["firstName", "lastName", "email", "phone"])
+    .search(["firstName", "lastName", "email", "phone", "customUserId", "address", "subscription"])
     .filter()
     .paginate()
     .sort();
@@ -88,13 +91,16 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
 };
 
 const getAllMerchants = async (query: Record<string, unknown>, user: any) => {
-  const { address, service, radius, ...rest } = query; // lat/lng আর query থেকে বাদ
-  const { location: userLocation } = user; // auth middleware থেকে লগইন ইউজারের location
+  const { address, service, radius, favorite, ...rest } = query;
+  const { location: userLocation, _id: userId } = user;
 
-  let baseQuery = User.find({ role: USER_ROLES.MERCENT });
+  let baseQuery = User.find({ role: USER_ROLES.MERCENT, verified: true });
+
+
+  // let baseQuery = User.find({ role: USER_ROLES.MERCENT });
 
   const allMerchantsQuery = new QueryBuilder(baseQuery, rest)
-    .search(["firstName", "lastName", "email", "phone"])
+    .search(["firstName", "lastName", "email", "phone", "businessName", "service", "address","customUserId","location","country","city"])
     .filter()
     .sort()
     .paginate();
@@ -121,12 +127,42 @@ const getAllMerchants = async (query: Record<string, unknown>, user: any) => {
     });
   }
 
-  const [allmerchants, pagination] = await Promise.all([
+  // 3️⃣ Fetch merchants and pagination
+  const [allmerchants, pagination, favorites] = await Promise.all([
     allMerchantsQuery.modelQuery.lean(),
     allMerchantsQuery.getPaginationInfo(),
+    Favorite.find({ userId }).select("merchantId").lean(),
   ]);
 
-  return { allmerchants, pagination };
+  const favoriteMap = new Set(favorites.map(f => f.merchantId.toString()));
+
+  // 4️⃣ Fetch average rating for all merchants at once using aggregation
+  const merchantIds = allmerchants.map(m => m._id);
+  const ratingsAgg = await Rating.aggregate([
+    { $match: { merchantId: { $in: merchantIds } } },
+    {
+      $group: {
+        _id: "$merchantId",
+        avgRating: { $avg: "$rating" },
+      },
+    },
+  ]);
+
+  const ratingMap = new Map<string, number>();
+  ratingsAgg.forEach(r => ratingMap.set(r._id.toString(), parseFloat(r.avgRating.toFixed(1))));
+
+  // 5️⃣ Combine favorite and avgRating
+  let merchantsWithFavorite = allmerchants.map(merchant => ({
+    ...merchant,
+    isFavorite: favoriteMap.has((merchant._id as any).toString()),
+    rating: ratingMap.get((merchant._id as any).toString()) || 0,
+  }));
+
+  if (favorite === "true") {
+    merchantsWithFavorite = merchantsWithFavorite.filter(m => m.isFavorite);
+  }
+
+  return { allmerchants: merchantsWithFavorite, pagination };
 };
 
 
@@ -240,7 +276,7 @@ const getNearbyMerchants = async (query: IQuery, userId: string) => {
     });
   }
 
-  pipeline.push(
+    pipeline.push(
     {
       $lookup: {
         from: "ratings",
@@ -255,14 +291,31 @@ const getNearbyMerchants = async (query: IQuery, userId: string) => {
         avgRating: {
           $cond: [
             { $gt: [{ $size: "$ratings" }, 0] },
-            { $avg: "$ratings.rating" },
+            { $round: [{ $avg: "$ratings.rating" }, 1] },
             0,
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        address: {
+          $concat: [
+            { $ifNull: ["$address", ""] },
+            " (",
+            {
+              $toString: {
+                $round: [{ $divide: ["$distance", 1000] }, 2],
+              },
+            },
+            " km)"
           ],
         },
       },
     },
     { $sort: { distance: 1 } }
   );
+
 
   const merchants = await User.aggregate(pipeline);
   return merchants;
@@ -355,14 +408,57 @@ const updateMerchant = async (id: string, payload: Record<string, unknown>) => {
 
 //==== delete merchant ====//
 const deleteMerchant = async (id: string) => {
-  const merchant = await User.findByIdAndDelete(id).lean();
+  console.log("Delete Merchant called for ID:", id);
 
+  const merchant = await User.findById(id).lean();
   if (!merchant) {
+    console.log("Merchant not found in DB");
     throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
   }
 
+  console.log("Merchant found:", merchant.firstName, merchant.email, merchant.fcmToken);
+
+  // 1️⃣ Send push notification
+  if (merchant.fcmToken) {
+    console.log("Sending push notification to:", merchant.fcmToken);
+    await sendPushNotification(
+      merchant.fcmToken,
+      "Account Deleted",
+      "Your merchant account has been deleted by Admin."
+    );
+    console.log("Push notification sent");
+  } else {
+    console.log("No FCM token found, skipping notification");
+  }
+
+      // 2️⃣ Save DB Notification for Super Admin(s)
+
+
+        // 🔎 Find Super Admin(s)
+  const superAdmins = await User.find({
+    role: USER_ROLES.SUPER_ADMIN,
+  }).select("_id fcmToken");
+
+  if (!superAdmins.length) {
+    console.log("No Super Admin found");
+  }
+
+  await sendNotification({
+    userIds: superAdmins.map((admin) => admin._id),
+    title: `Merchant ${merchant.firstName} (${merchant.email}) has been deleted by Admin.`,
+    body: `Merchant ${merchant.firstName} (${merchant.email}) has been deleted by Admin.`,
+    type: NotificationType.MANUAL,
+  });
+
+
+  // 2️⃣ Delete merchant
+  const deleted = await User.findByIdAndDelete(id);
+  console.log("Merchant deleted from DB:", deleted?._id);
+
   return merchant;
 };
+
+
 
 //==== merchant status update ====//
 
@@ -421,7 +517,17 @@ const updateMerchantApproveStatus = async (
 
   if (approveStatus === APPROVE_STATUS.APPROVED) {
 
-
+if (merchant.fcmToken) {
+    console.log("Sending push notification to:", merchant.fcmToken);
+    await sendPushNotification(
+      merchant.fcmToken,
+      "Account Approved",
+      "Your merchant account has been approved by Admin."
+    );
+    console.log("Push notification sent");
+  } else {
+    console.log("No FCM token found, skipping notification");
+  }
 
     await sendNotification({
       userIds: [merchant._id],
@@ -430,6 +536,23 @@ const updateMerchantApproveStatus = async (
       type: NotificationType.WELCOME,
     })
   }
+
+  const superAdmins = await User.find({
+    role: USER_ROLES.SUPER_ADMIN,
+  }).select("_id fcmToken");
+
+  if (!superAdmins.length) {
+    console.log("No Super Admin found");
+  }
+
+  await sendNotification({
+    userIds: superAdmins.map((admin) => admin._id),
+    title: `Merchant ${merchant.firstName} (${merchant.email}) has been approved.`,
+    body: `Merchant ${merchant.firstName} (${merchant.email}) has been approved by Admin.`,
+    type: NotificationType.MANUAL,
+  });
+
+
 
   return result;
 };

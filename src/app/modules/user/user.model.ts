@@ -52,6 +52,9 @@ const userSchema = new Schema<IUser, UserModal>(
       type: String,
       required: false,
     },
+    latestToken: {
+      type: String,
+    },
     fcmToken: {
       type: String,
     },
@@ -70,7 +73,11 @@ const userSchema = new Schema<IUser, UserModal>(
         referredBy: {
           type: String,
           required: false,
-        }
+        },
+        referredUserId: {
+          type: String,
+          required: false,
+        },
       }
 
     },
@@ -86,21 +93,24 @@ const userSchema = new Schema<IUser, UserModal>(
     },
     email: {
       type: String,
-      required: true,
-      unique: true,
       lowercase: true,
     },
     phone: {
       type: String,
-      required: true,
-      unique: true,
     },
     password: {
       type: String,
-      required: true,
       select: 0,
-      minlength: 8,
+
     },
+    googleId: { type: String, },
+    appleId: { type: String, },
+    authProviders: {
+      type: [String],
+      enum: ["local", "google", "apple"],
+      default: ["local"],
+    },
+
     country: {
       type: String,
       required: false,
@@ -176,6 +186,15 @@ const userSchema = new Schema<IUser, UserModal>(
       default: SUBSCRIPTION_STATUS.INACTIVE,
       enum: Object.values(SUBSCRIPTION_STATUS),
     },
+    isUserWaiting: {
+      type: Boolean,
+      default: false,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["paid", "unpaid", "expired"],
+      default: "unpaid",
+    },
     stripeAccountId: { type: String, default: null },
 
     authentication: {
@@ -225,21 +244,80 @@ const userSchema = new Schema<IUser, UserModal>(
       type: Number,
       default: 0,
     },
+    redeem: {
+      type: Number,
+      default: 0,
+    },
     totalVisits: {
       type: Number,
       default: 0,
     },
+    hasViewedReferral: {
+      type: Boolean,
+      default: false,
+    },
+    notificationSettings: { 
+      type: Object,
+      default: {
+        promotionalEmails: true,
+        appNotifications: true,
+        smsNotifications: true,
+        referralNotifications: true,
+        subscriptionNotifications: true,
+        pushNotifications: true,
+      },
+    },
+
+    // 🔹 Add these fields
+    isRootMerchant: {
+      type: Boolean,
+      default: false,
+    },
+    isSubMerchant: {
+      type: Boolean,
+      default: false,
+    },
+    previousPasswords: [
+      {
+        hash: String,
+        changedAt: Date
+      }
+    ],
+    
   },
   {
     timestamps: true,
   }
 );
 
+
+
 userSchema.index({ location: "2dsphere" });
 // Virtual id for JWT
 userSchema.virtual("id").get(function () {
   return this._id.toHexString();
 });
+
+userSchema.index(
+  { email: 1 },
+  { unique: true, partialFilterExpression: { email: { $exists: true, $ne: null } } }
+);
+
+userSchema.index(
+  { phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $exists: true, $ne: null } } }
+);
+
+userSchema.index(
+  { googleId: 1 },
+  { unique: true, partialFilterExpression: { googleId: { $exists: true } } }
+);
+
+userSchema.index(
+  { appleId: 1 },
+  { unique: true, partialFilterExpression: { appleId: { $exists: true } } }
+);
+
 
 // Virtual for fully verified
 
@@ -277,15 +355,15 @@ userSchema.statics.isMatchPassword = async (
 
 //check user
 userSchema.pre("save", async function (this: any, next) {
-  if (this.isNew) {
-    // only check email uniqueness on new user
-    const isExist = await User.findOne({ email: this.email });
-    if (isExist) {
-      return next(
-        new ApiError(StatusCodes.BAD_REQUEST, "Email already exist!")
-      );
-    }
-  }
+  // if (this.isNew) {
+  //   // only check email uniqueness on new user
+  //   const isExist = await User.findOne({ email: this.email });
+  //   if (isExist) {
+  //     return next(
+  //       new ApiError(StatusCodes.BAD_REQUEST, "Email already exist!")
+  //     );
+  //   }
+  // }
 
   // Hash password if modified
   if (this.isModified("password") && this.password) {

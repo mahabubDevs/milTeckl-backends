@@ -15,6 +15,9 @@ export type IPackage = {
     status?: 'Active' | 'Delete';
     payoutAccountId?: string;
     admin: Types.ObjectId;
+    priceIdWithPoints?: { [points: number]: string };
+ // NEW
+    
 };
 
 export type PackageModel = Model<IPackage, Record<string, unknown>>;

@@ -32,10 +32,10 @@ router.post(
 //     AuthController.resendVerificationEmail
 // );
 router.post(
-    '/phone-otp',
-    // auth(USER_ROLES.ADMIN, USER_ROLES.USER),
-    AuthController.sendPhoneOtp
+  '/resend-otp',
+  AuthController.resendOtp
 );
+
 // router.post(
 //     '/resend-email-otp',
 //     AuthController.resendVerificationEmail
@@ -64,23 +64,21 @@ router.post(
 // );
 
 router.post(
-    '/verify-phone',
+    '/verify-otp',
     async (req: Request, res: Response, next: NextFunction) => {
-
         try {
-            const { phone, oneTimeCode } = req.body;
+            const { identifier, oneTimeCode } = req.body;
 
-            req.body = { phone, oneTimeCode: Number(oneTimeCode)};
+            req.body = { identifier, oneTimeCode: Number(oneTimeCode) };
             next();
-
         } catch (error) {
             return res.status(500).json({ message: "Failed to convert string to number" });
         }
     },
-    // auth(),
-    validateRequest(AuthValidation.createVerifyPhoneZodSchema),
-    AuthController.verifyPhone
+    validateRequest(AuthValidation.createVerifyOtpZodSchema),
+    AuthController.verifyOtp
 );
+
 
 router.post(
     '/reset-password',
@@ -97,10 +95,10 @@ router.post(
 
 
 router.post(
-  '/upload-documents',
-  fileUploadHandler(),
-  auth(USER_ROLES.ADMIN, USER_ROLES.USER),
-  AuthController.uploadDocumentImages
+    '/upload-documents',
+    fileUploadHandler(),
+    auth(USER_ROLES.ADMIN, USER_ROLES.USER),
+    AuthController.uploadDocumentImages
 );
 
 router.put(
@@ -132,14 +130,14 @@ router.delete(
 
 
 // Google Auth Routes
-router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+// router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
-router.get("/google/callback", 
-    passport.authenticate("google", { failureRedirect: "/" }),
-    (req, res) => {
-        res.redirect("/"); // Redirect after successful login
-    }
-);
+// router.get("/google/callback", 
+//     passport.authenticate("google", { failureRedirect: "/" }),
+//     (req, res) => {
+//         res.redirect("/"); // Redirect after successful login
+//     }
+// );
 
 // Facebook Auth Routes
 // router.get("/facebook", passport.authenticate("facebook", { scope: ["email"] }));
@@ -150,5 +148,7 @@ router.get("/google/callback",
 //         res.redirect("/dashboard"); // Redirect after successful login
 //     }
 // );
+
+router.post("/google", validateRequest(AuthValidation.googleLoginZodSchema), AuthController.googleLogin)
 
 export const AuthRoutes = router;

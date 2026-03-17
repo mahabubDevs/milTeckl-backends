@@ -34,7 +34,7 @@ router.patch(
 
 router.get(
   "/customers",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN , USER_ROLES.VIEW_ADMIN, USER_ROLES.VIEW_MERCENT, USER_ROLES.ADMIN_REP),
   AdminController.getAllCustomers
 );
 
@@ -57,7 +57,7 @@ router.get(
 
 router.get(
   "/merchants/export",
-  // auth(),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
   AdminController.exportMerchants
 );
 
@@ -105,7 +105,7 @@ router.patch(
 //=== all customers ===//
 router.get(
   "/customers",
-  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.VIEW_MERCENT),
+  auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.VIEW_MERCENT,USER_ROLES.VIEW_ADMIN, USER_ROLES.ADMIN_REP, USER_ROLES.ADMIN_SELL),
   AdminController.getAllCustomers
 );
 

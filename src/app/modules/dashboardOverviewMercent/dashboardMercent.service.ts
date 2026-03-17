@@ -3,9 +3,12 @@ import { User } from "../user/user.model";
 import { USER_ROLES, USER_STATUS } from "../../../enums/user";
 import { ApplyRequest } from "../sellManagement/sellManagement.model";
 
-import mongoose from "mongoose";
+
+import mongoose, { Types } from "mongoose";
+
 import { Promotion } from "../promotionAdmin/promotionAdmin.model";
 import { Sell } from "../mercent/mercentSellManagement/mercentSellManagement.model";
+
 
 const getTotalRevenue = async (query: any) => {
   const startDate = new Date(query.start);
@@ -62,8 +65,7 @@ const getTotalRevenue = async (query: any) => {
   const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
 
   while (current <= end) {
-    const monthStr = `${
-      [
+    const monthStr = `${[
         "Jan",
         "Feb",
         "Mar",
@@ -77,7 +79,7 @@ const getTotalRevenue = async (query: any) => {
         "Nov",
         "Dec",
       ][current.getMonth()]
-    } ${current.getFullYear()}`;
+      } ${current.getFullYear()}`;
     allMonths.push(monthStr);
     current.setMonth(current.getMonth() + 1);
   }
@@ -195,7 +197,7 @@ const getReportForMerchantDashboard = async (
   range: string = "7d"
 ) => {
   const today = new Date();
-  let startDate: Date | undefined;
+  let startDate: Date;
 
   switch (range) {
     case "today":
@@ -217,6 +219,9 @@ const getReportForMerchantDashboard = async (
       startDate.setMonth(today.getMonth() - 3);
       startDate.setHours(0, 0, 0, 0);
       break;
+    case "all":
+      startDate = new Date(0);
+      break;
     default:
       startDate = new Date();
       startDate.setDate(today.getDate() - 6);
@@ -224,34 +229,47 @@ const getReportForMerchantDashboard = async (
       break;
   }
 
-  const dateFilter = startDate ? { $gte: startDate, $lte: today } : undefined;
+  const dateFilter = { $gte: startDate, $lte: today };
 
-  // Total Members = unique buyers
+  // 1️⃣ Total Members
   const buyersQuery: any = {
     merchantId: new mongoose.Types.ObjectId(merchantId),
     userId: { $ne: null },
+    createdAt: dateFilter,
+    status: "completed",
   };
-  if (dateFilter) buyersQuery.createdAt = dateFilter;
 
-  const buyers = await Promotion.distinct("userId", buyersQuery);
+  const buyers = await Sell.distinct("userId", buyersQuery);
   const totalMembers = buyers.length;
 
-  // Rewards Redeemed = giftcard status = redeem
-  const redeemedQuery: any = {
-    merchantId: new mongoose.Types.ObjectId(merchantId),
-    status: "redeem",
-  };
-  if (dateFilter) redeemedQuery.createdAt = dateFilter;
-  const rewardsRedeemed = await Promotion.countDocuments(redeemedQuery);
+  // 2️⃣ Rewards Redeemed (sum of pointRedeemed)
+  const redeemedAgg = await Sell.aggregate([
+    {
+      $match: {
+        merchantId: new mongoose.Types.ObjectId(merchantId),
+        createdAt: dateFilter,
+        status: "completed",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRedeemed: { $sum: "$pointRedeemed" },
+      },
+    },
+  ]);
 
-  // Total Points Issued = sum(pointsEarned)
-  const pointsMatch: any = {
-    merchantId: new mongoose.Types.ObjectId(merchantId),
-  };
-  if (dateFilter) pointsMatch.createdAt = dateFilter;
+  const rewardsRedeemed = redeemedAgg[0]?.totalRedeemed || 0;
 
-  const pointsAgg = await ApplyRequest.aggregate([
-    { $match: pointsMatch },
+  // 3️⃣ Total Points Issued
+  const pointsAgg = await Sell.aggregate([
+    {
+      $match: {
+        merchantId: new mongoose.Types.ObjectId(merchantId),
+        createdAt: dateFilter,
+        status: "completed",
+      },
+    },
     {
       $group: {
         _id: null,
@@ -259,24 +277,26 @@ const getReportForMerchantDashboard = async (
       },
     },
   ]);
+
   const totalPointsIssued = pointsAgg[0]?.totalPoints || 0;
 
-  // Total Sales = sum(billAmount)
-  const salesMatch: any = {
-    merchantId: new mongoose.Types.ObjectId(merchantId),
-    status: "merchant_confirmed",
-  };
-  if (dateFilter) salesMatch.createdAt = dateFilter;
-
-  const salesAgg = await ApplyRequest.aggregate([
-    { $match: salesMatch },
+  // 4️⃣ Total Sales
+  const salesAgg = await Sell.aggregate([
+    {
+      $match: {
+        merchantId: new mongoose.Types.ObjectId(merchantId),
+        createdAt: dateFilter,
+        status: "completed",
+      },
+    },
     {
       $group: {
         _id: null,
-        totalSales: { $sum: "$billAmount" },
+        totalSales: { $sum: "$totalBill" },
       },
     },
   ]);
+
   const totalSales = salesAgg[0]?.totalSales || 0;
 
   return {
@@ -284,28 +304,29 @@ const getReportForMerchantDashboard = async (
     totalSales,
     totalMembers,
     totalPointsIssued,
-    rewardsRedeemed,
+    rewardsRedeemed, // now sum of pointRedeemed
   };
 };
 
 const getWeeklySellReport = async (merchantId: string) => {
   const today = new Date();
   const sevenDaysAgo = new Date();
+  sevenDaysAgo.setHours(0, 0, 0, 0);
   sevenDaysAgo.setDate(today.getDate() - 6); // last 7 days
 
-  // last 7 days ApplyRequest fetch + daily total
-  const data = await ApplyRequest.aggregate([
+  // last 7 days Sell fetch + daily total
+  const data = await Sell.aggregate([
     {
       $match: {
         merchantId: new mongoose.Types.ObjectId(merchantId),
         createdAt: { $gte: sevenDaysAgo, $lte: today },
-        status: "merchant_confirmed", // or "approved"
+        status: "completed", // Sell collection এ completed ব্যবহার
       },
     },
     {
       $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-        totalSell: { $sum: "$billAmount" },
+        totalSell: { $sum: "$totalBill" },
         totalOrders: { $sum: 1 },
       },
     },
@@ -333,7 +354,7 @@ const getWeeklySellReport = async (merchantId: string) => {
     });
   }
 
-  // percentage
+  // percentage calculation
   const finalResult = result.map((day) => ({
     ...day,
     percentage:
@@ -343,7 +364,7 @@ const getWeeklySellReport = async (merchantId: string) => {
   }));
 
   return {
-    totalSell, // 7 days total
+    totalSell, // last 7 days total
     weeklyReport: finalResult,
   };
 };
@@ -429,22 +450,27 @@ const getCustomerChart = async (merchantId: string, year?: number) => {
   return formatted;
 };
 
+
 const getCustomerChartWeek = async (
   merchantId: string,
   startDate: string,
   endDate: string
 ) => {
-  const from = new Date(startDate);
-  const to = new Date(endDate);
+
+  const from = new Date(`${startDate}T00:00:00Z`);
+  const to = new Date(`${endDate}T23:59:59Z`);
+
+  if (!startDate || !endDate) {
+    throw new Error("Start date and end date are required");
+  }
 
   const pipeline = [
     {
       $match: {
-        merchantId: new mongoose.Types.ObjectId(merchantId),
+        merchantId: new Types.ObjectId(merchantId),
         createdAt: { $gte: from, $lte: to },
       },
     },
-
     {
       $group: {
         _id: {
@@ -455,30 +481,30 @@ const getCustomerChartWeek = async (
         totalRevenue: { $sum: "$discountedBill" },
       },
     },
-
     {
       $sort: {
         "_id.year": 1,
         "_id.month": 1,
         "_id.day": 1,
-      } as any,
+      },
     },
-  ];
+  ] as any;
 
   const data = await Sell.aggregate(pipeline);
 
-  // ---- format into a full 7-day series ----
-  const days = [];
+  const days: { date: string; revenue: number }[] = [];
   const current = new Date(from);
 
   while (current <= to) {
-    const y = current.getFullYear();
-    const m = current.getMonth() + 1;
-    const d = current.getDate();
+    const y = current.getUTCFullYear();
+    const m = current.getUTCMonth() + 1;
+    const d = current.getUTCDate();
 
     const found = data.find(
       (item) =>
-        item._id.year === y && item._id.month === m && item._id.day === d
+        item._id.year === y &&
+        item._id.month === m &&
+        item._id.day === d
     );
 
     days.push({
@@ -486,11 +512,14 @@ const getCustomerChartWeek = async (
       revenue: found?.totalRevenue || 0,
     });
 
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return days;
 };
+
+
+
 
 export const DashboardMercentService = {
   getReportForMerchantDashboard,

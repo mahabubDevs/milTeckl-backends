@@ -15,6 +15,18 @@ const getAuditLogs = catchAsync(async (req, res) => {
 });
 
 
+const getAuditLogTier = catchAsync(async (req, res) => {
+  const logs = await AuditService.getAllLogsExceptMerchantTier(req.query);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: "Audit logs retrieved successfully (merchant logs excluded)",
+    data: logs,
+  });
+});
+
+
 const getAuditLogsByUser = catchAsync(async (req, res) => {
   // 🔐 logged-in user
   const user = req.user as { _id: string };
@@ -46,5 +58,6 @@ const getAuditLogsByUser = catchAsync(async (req, res) => {
 
 export const AuditController = {
   getAuditLogs,
-  getAuditLogsByUser
+  getAuditLogsByUser,
+  getAuditLogTier
 };

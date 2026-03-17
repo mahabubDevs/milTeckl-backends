@@ -14,12 +14,12 @@ export interface IPushResponse {
 
 
 export interface IPushPayload {
-  sendType: "ALL" | "SPECIFIC";
+  sendType: "ALL" | "MERCENT" | "USER";
   title: string;
   body: string;
-
-  location?: string;
+  country?: string;
   tier?: string;
   subscriptionType?: string;
   status?: string;
+  city?: string; // নতুন ফিল্ড
 }

@@ -19,84 +19,187 @@ import generateOTP from '../../../util/generateOTP';
 import { ResetToken } from '../resetToken/resetToken.model';
 import { User } from '../user/user.model';
 import { IUser } from '../user/user.interface';
-import { sendOtp } from '../../../shared/twilioService';
+import { sendOtp } from '../../../config/veevoTechOtp';
 import { SUBSCRIPTION_STATUS, USER_ROLES, USER_STATUS } from '../../../enums/user';
+import { OAuth2Client } from 'google-auth-library';
+import { createUniqueReferralId } from '../../../util/generateRefferalId';
+import { generateCustomUserId } from '../user/user.utils';
+import { sendNotification } from '../../../helpers/notificationsHelper';
+import { NotificationType } from '../notification/notification.model';
 
 
 
 
+const DEVICE_ROLE_MAP: Record<string, USER_ROLES[]> = {
+  merchant: [
+    USER_ROLES.MERCENT,
+    USER_ROLES.VIEW_MERCENT,
+    USER_ROLES.ADMIN_MERCENT,
+  ],
+  admin: [
+    USER_ROLES.ADMIN,
+    USER_ROLES.SUPER_ADMIN,
+    USER_ROLES.ADMIN_REP,
+    USER_ROLES.ADMIN_SELL,
+    USER_ROLES.VIEW_ADMIN,
+  ],
+  user: [
+    USER_ROLES.USER
+  ],
+};
 
-
-
-
-//login
-const loginUserFromDB = async (payload: ILoginData) => {
-  const { identifier, password } = payload;
+const loginUserFromDB = async (payload: ILoginData & { device: string }) => {
+  const { identifier, password, device } = payload;
 
   // 1️⃣ Find user by email or phone
   const user: any = await User.findOne({
     $or: [{ email: identifier }, { phone: identifier }],
   }).select('+password');
 
-  if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  if (!user) throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  if (!user.verified) throw new ApiError(StatusCodes.BAD_REQUEST, 'Please verify your account before login');
+  if (user.status !== USER_STATUS.ACTIVE) throw new ApiError(StatusCodes.BAD_REQUEST, 'Your account is not active. Please contact support.');
+  if (password && !(await User.isMatchPassword(password, user.password))) throw new ApiError(StatusCodes.BAD_REQUEST, 'Password is incorrect!');
+
+  // 2️⃣ Device-based role validation
+  const allowedRoles = DEVICE_ROLE_MAP[device.toLowerCase()];
+  if (!allowedRoles) throw new ApiError(StatusCodes.BAD_REQUEST, "Invalid device type");
+
+  if (!allowedRoles.includes(user.role)) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      `Your role '${user.role}' is not allowed to login from a ${device} device`
+    );
   }
 
-  // 2️⃣ Check verified
-  if (!user.verified) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Please verify your account before login');
-  }
+  // 3️⃣ Create tokens
+  const accessToken = jwtHelper.createToken(
+    { id: user._id, role: user.role, email: user.email },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string
+  );
 
-  // 3️⃣ Check password match
-  if (password && !(await User.isMatchPassword(password, user.password))) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password is incorrect!');
-  }
+  const refreshToken = jwtHelper.createToken(
+    { id: user._id, role: user.role, email: user.email },
+    config.jwt.jwtRefreshSecret as Secret,
+    config.jwt.jwtRefreshExpiresIn as string
+  );
 
+  await User.findByIdAndUpdate(user._id, { latestToken: accessToken });
 
-  if (user.role === USER_ROLES.USER && user.subscription !== SUBSCRIPTION_STATUS.ACTIVE) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "You are not subscribed");
-  }
-  // 4️⃣ Status check
-  switch (user.status) {
-    case USER_STATUS.ACTIVE:
-      // create tokens
-      const accessToken = jwtHelper.createToken(
-        { id: user._id, role: user.role, email: user.email },
-        config.jwt.jwt_secret as Secret,
-        config.jwt.jwt_expire_in as string
-      );
-
-      const refreshToken = jwtHelper.createToken(
-        { id: user._id, role: user.role, email: user.email },
-        config.jwt.jwtRefreshSecret as Secret,
-        config.jwt.jwtRefreshExpiresIn as string
-      );
-
-      return {
-        success: true,
-        message: "Login successful",
-        accessToken,
-        refreshToken,
-        user: {
-          pages: user.pages || [],
-        }
-      };
-
-    case USER_STATUS.ARCHIVE:
-      throw new ApiError(StatusCodes.BAD_REQUEST, "Your account is archived. Please verify your account first");
-
-    case USER_STATUS.BLOCK:
-      throw new ApiError(StatusCodes.FORBIDDEN, "You are blocked. Contact admin.");
-
-    default:
-      throw new ApiError(StatusCodes.BAD_REQUEST, "Please verify your account for admin approval");
-  }
+  return {
+    success: true,
+    message: "Login successful",
+    accessToken,
+    refreshToken,
+    user: {
+      role: user.role,
+      pages: user.pages || [],
+      subscription: user.subscription,
+      businessName: user.businessName || "",
+      isUserWaiting: user.isUserWaiting,
+      location: user.location ?? { type: 'Point', coordinates: [0, 0] },
+    }
+  };
 };
 
+
+
+// //login
+// const  loginUserFromDB = async (payload: ILoginData) => {
+//   const { identifier, password } = payload;
+
+//   // 1️⃣ Find user by email or phone
+//   const user: any = await User.findOne({
+//     $or: [{ email: identifier }, { phone: identifier }],
+//   }).select('+password');
+
+//   if (!user) {
+//     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+//   }
+
+//   // 2️⃣ Check verified
+//   if (!user.verified) {
+//     throw new ApiError(StatusCodes.BAD_REQUEST, 'Please verify your account before login');
+//   }
+
+//   // Check user active or not
+//   if (user.status !== USER_STATUS.ACTIVE) {
+//     throw new ApiError(StatusCodes.BAD_REQUEST, 'Your account is not active. Please contact support.');
+//   }
+
+//   // 3️⃣ Check password match
+//   if (password && !(await User.isMatchPassword(password, user.password))) {
+//     throw new ApiError(StatusCodes.BAD_REQUEST, 'Password is incorrect!');
+//   }
+
+
+//   // if (user.role === USER_ROLES.USER && user.subscription !== SUBSCRIPTION_STATUS.ACTIVE) {
+//   //   throw new ApiError(StatusCodes.BAD_REQUEST, "You are not subscribed");
+//   // }
+//   // 4️⃣ Status check
+//   switch (user.status) {
+//     case USER_STATUS.ACTIVE:
+
+
+
+
+//       // create tokens
+//       const accessToken = jwtHelper.createToken(
+//         { id: user._id, role: user.role, email: user.email },
+//         config.jwt.jwt_secret as Secret,
+//         config.jwt.jwt_expire_in as string
+//       );
+
+//       const refreshToken = jwtHelper.createToken(
+//         { id: user._id, role: user.role, email: user.email },
+//         config.jwt.jwtRefreshSecret as Secret,
+//         config.jwt.jwtRefreshExpiresIn as string
+//       );
+
+//       // ✅ Save latest token to DB
+//     await User.findByIdAndUpdate(user._id, { latestToken: accessToken });
+
+//       return {
+//         success: true,
+//         message: "Login successful",
+//         accessToken,
+//         refreshToken,
+//         user: {
+//           role: user.role,
+//           pages: user.pages || [],
+//           subscription: user.subscription,
+//           businessName: user.businessName || "",
+//           isUserWaiting: user.isUserWaiting,
+//           location: user.location ?? {
+//             type: 'Point',
+//             coordinates: [0, 0],
+//           },
+
+
+//         }
+//       };
+
+//     case USER_STATUS.ARCHIVE:
+//       throw new ApiError(StatusCodes.BAD_REQUEST, "Your account is archived. Please verify your account first");
+
+//     case USER_STATUS.BLOCK:
+//       throw new ApiError(StatusCodes.FORBIDDEN, "You are blocked. Contact admin.");
+
+//     default:
+//       throw new ApiError(StatusCodes.BAD_REQUEST, "Please verify your account for admin approval");
+//   }
+// };
+
 //forget password
-const forgetPasswordToDB = async (phone: string) => {
-  // 1️⃣ Find user by phone
-  const user = await User.findOne({ phone }).select('+phone');
+const forgetPasswordToDB = async (identifier: string) => {
+  const isEmail = identifier.includes("@");
+
+  // 1️⃣ Find user by email or phone
+  const user = isEmail
+    ? await User.findOne({ email: identifier })
+    : await User.findOne({ phone: identifier });
+
   if (!user) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
@@ -104,28 +207,50 @@ const forgetPasswordToDB = async (phone: string) => {
   // 2️⃣ Generate OTP
   const otp = generateOTP();
 
-  console.log("Generated OTP for password reset:", otp);
-  // 3️⃣ Save OTP in DB under phoneOTP
   user.authentication = user.authentication || {};
-  user.authentication.phoneOTP = {
-    code: otp,
-    expireAt: new Date(Date.now() + 3 * 60 * 1000), // 3 min validity
-  };
-  // mark that this authentication flow is for resetting password
   user.authentication.isResetPassword = true;
+
+  if (isEmail) {
+    // 📧 Email OTP
+    user.authentication.emailOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60000),
+    };
+    user.authentication.resetVia = "email";
+  } else {
+    // 📱 Phone OTP
+    user.authentication.phoneOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60000),
+    };
+    user.authentication.resetVia = "phone";
+  }
+
   await user.save();
 
-  // // 4️⃣ Send OTP via Twilio
-  // try {
-  //     await sendOtp(user.phone, String(otp));
-  //     console.log(`OTP sent to phone ${user.phone}: ${otp}`);
-  // } catch (error) {
-  //     console.error("Failed to send OTP via Twilio:", error);
-  //     throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, "Failed to send OTP, try again");
-  // }
+  // 3️⃣ Send OTP
+  if (isEmail) {
+    const values = {
+      name: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      otp: otp,
+      email: user.email ?? ""
+    };
 
-  return { phone: user.phone, otp: otp };
+    const resetPasswordTemplate = emailTemplate.resetPassword(values);
+    await emailHelper.sendEmail(resetPasswordTemplate);
+  } else {
+    // Phone OTP (existing system)
+    await sendOtp(user.phone!, otp.toString());
+  }
+
+  return {
+    identifier,
+    via: user.authentication.resetVia,
+  };
 };
+
+
 
 
 
@@ -213,20 +338,25 @@ const forgetPasswordToDB = async (phone: string) => {
 
 
 // verifyPhoneOtpToDB.ts
-const verifyPhoneOtpToDB = async (payload: IVerifyPhone) => {
-  const { phone, oneTimeCode } = payload;
-  console.log("verifyPhoneOtpToDB called with:", payload);
+const verifyOtpToDB = async (payload: { identifier: string, oneTimeCode: number }) => {
+  const { identifier, oneTimeCode } = payload;
 
-  // 1️⃣ Find user by phone number
-  const user = await User.findOne({ phone }).select("+authentication");
+  const isEmail = identifier.includes("@");
+
+  // 1️⃣ Find user by email or phone
+  const user = isEmail
+    ? await User.findOne({ email: identifier }).select("+authentication")
+    : await User.findOne({ phone: identifier }).select("+authentication");
+
   if (!user) throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
 
   // 2️⃣ Validate OTP
   if (!oneTimeCode) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Please provide OTP sent to your phone");
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Please provide OTP sent to your identifier");
   }
 
-  const otpInfo = user.authentication?.phoneOTP;
+  const otpInfo = isEmail ? user.authentication?.emailOTP : user.authentication?.phoneOTP;
+
   if (!otpInfo || otpInfo.code !== oneTimeCode) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "You provided wrong OTP");
   }
@@ -235,24 +365,29 @@ const verifyPhoneOtpToDB = async (payload: IVerifyPhone) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "OTP already expired, request new one");
   }
 
-  // 3️⃣ Mark phone as verified & clear OTP
-  if (!user.verified) {
-    user.verified = true;
-    if (user.authentication) {
-      delete user.authentication.phoneOTP;
-      user.authentication.isResetPassword = true; // enable reset flow
-    } else {
-      user.authentication = { isResetPassword: true } as any;
-    }
-    await user.save();
+  // 3️⃣ Mark verified & clear OTP
+  if (!user.verified) user.verified = true;
+
+  if (user.authentication) {
+    if (isEmail) delete user.authentication.emailOTP;
+    else delete user.authentication.phoneOTP;
+
+    user.authentication.isResetPassword = true; // allow reset flow
+  } else {
+    user.authentication = { isResetPassword: true } as any;
   }
 
-  // 4️⃣ Generate JWT token
+  await user.save();
+
+  // 4️⃣ Generate JWT access token
   const accessToken = jwtHelper.createToken(
     { id: user._id, role: user.role, email: user.email, phoneNumber: user.phone },
     config.jwt.jwt_secret!,
     config.jwt.jwt_expire_in!
   );
+
+  user.latestToken = accessToken;
+  await user.save();
 
   // 5️⃣ Generate reset token (for password reset)
   const resetToken = cryptoToken();
@@ -262,56 +397,148 @@ const verifyPhoneOtpToDB = async (payload: IVerifyPhone) => {
     expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
   });
 
-  return { message: "Phone verified successfully", accessToken, resetToken };
+
+  // ✅ 6️⃣ Background referral check (fire-and-forget)
+     // ✅ Background referral check (fire-and-forget)
+(async (verifiedUser) => {
+  try {
+    if (verifiedUser.referredInfo) {
+      const referredId = verifiedUser.referredInfo.referredId;
+      console.log(`[Background] User ${verifiedUser.email} has a referral. ReferredId: ${referredId}`);
+
+      // Find referring user by customUserId
+      const referringUser = await User.findOne({ referenceId: referredId });
+      if (referringUser) {
+        console.log(
+          `[Background] Referring User Info -> Name: ${referringUser.firstName}, Email: ${referringUser.email}, Role: ${referringUser.role}`
+        );
+
+        if (["ADMIN_REP", "ADMIN_SELL"].includes(referringUser.role as string)) {
+          // Send notification to referring user
+          await sendNotification({
+            userIds: [referringUser._id],
+            title: "New customer added under you",
+            body: `Congratulations! A new member ${verifiedUser.firstName || verifiedUser.email} has been added under you.`,
+            type: NotificationType.MANUAL,
+            metadata: { referralId: verifiedUser._id.toString() },
+            channel: { socket: true, push: true },
+          });
+          console.log(`[Background] Notification sent to ${referringUser.email} (Role: ${referringUser.role})`);
+        }
+      } else {
+        console.log(`[Background] Referring user not found for ReferredId: ${referredId}`);
+      }
+    } else {
+      console.log(`[Background] User ${verifiedUser.email} has NO referral.`);
+    }
+  } catch (err) {
+    console.error("[Background] Referral check error:", err);
+  }
+})(user);
+
+
+
+  return { message: "OTP verified successfully", accessToken, resetToken };
 };
+
 
 
 
 
 //forget password
 const resetPasswordToDB = async (token: string, payload: IAuthResetPassword) => {
-
   const { newPassword, confirmPassword } = payload;
-  console.log("Resetting password with token:", token);
+  console.log("[Step 0] Resetting password with token:", token);
 
-  //isExist token
+  // 1️⃣ Check if token exists
   const isExistToken = await ResetToken.isExistToken(token);
+  console.log("[Step 1] Token exists:", !!isExistToken);
   if (!isExistToken) {
     throw new ApiError(StatusCodes.UNAUTHORIZED, 'You are not authorized');
   }
 
-  //user permission check
-  const isExistUser = await User.findById(isExistToken.user).select('+authentication');
+  // 2️⃣ Get user with authentication
+  const isExistUser = await User.findById(isExistToken.user)
+    .select('+password +previousPasswords +authentication');
+  console.log("[Step 2] Found user:", isExistUser?._id);
+
   if (!isExistUser?.authentication?.isResetPassword) {
-    throw new ApiError(StatusCodes.UNAUTHORIZED, "You don't have permission to change the password. Please click again to 'Forgot Password'");
+    throw new ApiError(StatusCodes.UNAUTHORIZED, 
+      "You don't have permission to change the password. Please click again to 'Forgot Password'");
   }
 
-  //validity check
+  // 3️⃣ Check token validity
   const isValid = await ResetToken.isExpireToken(token);
+  console.log("[Step 3] Token valid:", isValid);
   if (!isValid) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Token expired, Please click again to the forget password');
+    throw new ApiError(StatusCodes.BAD_REQUEST, 
+      'Token expired, Please click again to the forget password');
   }
 
-  //check password
+  // 4️⃣ Check new password matches confirm password
+  console.log("[Step 4] New Password:", newPassword, "Confirm Password:", confirmPassword);
   if (newPassword !== confirmPassword) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "New password and Confirm password doesn't match!");
+    throw new ApiError(StatusCodes.BAD_REQUEST, 
+      "New password and Confirm password doesn't match!");
   }
 
-  const hashPassword = await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
+  // 5️⃣ Check previousPasswords array
+  console.log("[Step 5] Checking previousPasswords for reuse...");
+  if (isExistUser.previousPasswords?.length) {
+    for (const prev of isExistUser.previousPasswords) {
+      const match = await bcrypt.compare(newPassword, prev.hash);
+      console.log("    Comparing with previous hash:", prev.hash, "Match:", match);
+      if (match) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'You cannot reuse an old password!');
+      }
+    }
+  }
 
+  // 6️⃣ Hash new password
+  const hashPassword = await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
+  console.log("[Step 6] Hashed new password:", hashPassword);
+
+  // 7️⃣ Push old password to previousPasswords
+  isExistUser.previousPasswords = isExistUser.previousPasswords || [];
+  if (isExistUser.password) {
+    isExistUser.previousPasswords.push({
+      hash: isExistUser.password,
+      changedAt: new Date()
+    });
+    console.log("[Step 7] Old password pushed to previousPasswords:", isExistUser.password);
+  }
+
+
+   // 6️⃣ Check current password to prevent reuse
+  if (isExistUser.password) {
+    const isSameAsCurrent = await bcrypt.compare(newPassword, isExistUser.password);
+    console.log("[Step 6] Compare with current password:", isSameAsCurrent);
+    if (isSameAsCurrent) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 
+        'Please provide a different password from the previous one');
+    }
+  }
+
+  // 8️⃣ Update user password and reset authentication
   const updateData = {
     password: hashPassword,
+
     authentication: {
       isResetPassword: false,
-    }
+    },
+    previousPasswords: isExistUser.previousPasswords
   };
+  console.log("[Step 8] Updating user password with new hash");
 
   await User.findOneAndUpdate(
     { _id: isExistToken.user },
     updateData,
     { new: true }
   );
+
+  console.log("[Step 9] Password reset completed for user:", isExistUser._id);
 };
+
 
 const changePasswordToDB = async (user: JwtPayload, payload: IChangePassword) => {
 
@@ -342,11 +569,35 @@ const changePasswordToDB = async (user: JwtPayload, payload: IChangePassword) =>
     throw new ApiError(StatusCodes.BAD_REQUEST, "Password and Confirm password doesn't matched");
   }
 
+   console.log("[Step 5] Checking previousPasswords for reuse...");
+  if (isExistUser.previousPasswords?.length) {
+    for (const prev of isExistUser.previousPasswords) {
+      const match = await bcrypt.compare(newPassword, prev.hash);
+      console.log("    Comparing with previous hash:", prev.hash, "Match:", match);
+      if (match) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, 'You cannot reuse an old password!');
+      }
+    }
+  }
+
   //hash password
   const hashPassword = await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
 
+
+    // 7️⃣ Push old password to previousPasswords
+  isExistUser.previousPasswords = isExistUser.previousPasswords || [];
+  if (isExistUser.password) {
+    isExistUser.previousPasswords.push({
+      hash: isExistUser.password,
+      changedAt: new Date()
+    });
+    console.log("[Step 7] Old password pushed to previousPasswords:", isExistUser.password);
+  }
+
+
   const updateData = {
     password: hashPassword,
+    previousPasswords: isExistUser.previousPasswords,
   };
 
   await User.findOneAndUpdate({ _id: user._id }, updateData, { new: true });
@@ -511,36 +762,111 @@ const deleteOwnUserAccount = async (userId: string, password: string) => {
   const isMatch = await bcrypt.compare(password.trim(), user.password);
   if (!isMatch) throw new ApiError(StatusCodes.UNAUTHORIZED, "Incorrect password");
 
+   // 🔹 Keep user info before delete
+  const deletedUserInfo = {
+    id: user._id,
+    name: user.firstName || "Unknown User",
+    email: user.email,
+  };
+
   await User.findByIdAndDelete(userId);
+
+  
+  // ✅ Background notification (fire & forget)
+  (async () => {
+    try {
+      const admins = await User.find({
+        role: { $in: ["ADMIN", "SUPER_ADMIN"] },
+        status: "active",
+      }).select("_id");
+
+      const adminIds = admins.map((a) => a._id);
+
+      if (adminIds.length) {
+        await sendNotification({
+          userIds: adminIds,
+          title: "User account deleted",
+          body: `User ${deletedUserInfo.name} (${deletedUserInfo.email}) has deleted their account.`,
+          type: NotificationType.MANUAL,
+          metadata: {
+            deletedUserId: deletedUserInfo.id.toString(),
+            email: deletedUserInfo.email,
+          },
+          channel: { socket: true, push: true },
+        });
+      }
+
+      console.log(
+        `[Background] Account deletion notification sent to ${adminIds.length} admin(s)`
+      );
+    } catch (err) {
+      console.error("[Background] Account delete notification error:", err);
+    }
+  })();
   return { deletedUserId: userId };
 };
 // sendPhoneOtpToDB.ts
 // sendPhoneOtpToDB.ts
-const sendPhoneOtpToDB = async (phone: string) => {
-  // 1️⃣ Find existing user by phone
-  const user = await User.findOne({ phone }).select("+authentication");
+const resendOtpToDB = async (identifier: string) => {
+  const isEmail = identifier.includes("@");
+
+  // 1️⃣ Find user
+  const user = isEmail
+    ? await User.findOne({ email: identifier }).select("+authentication")
+    : await User.findOne({ phone: identifier }).select("+authentication");
+
   if (!user) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist with this phone number");
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `User doesn't exist with this ${isEmail ? "email" : "phone"}`
+    );
   }
 
   // 2️⃣ Generate OTP
   const otp = generateOTP();
 
-  // 3️⃣ Ensure authentication object exists
+  // 3️⃣ Ensure authentication object
   user.authentication = user.authentication || {};
-  user.authentication.phoneOTP = {
-    code: otp,
-    expireAt: new Date(Date.now() + 3 * 60 * 1000), // 3 min
-  };
+  user.authentication.isResetPassword = true;
 
-  // 4️⃣ Save OTP to DB
+  // 4️⃣ Save OTP
+  if (isEmail) {
+    user.authentication.emailOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60 * 1000),
+    };
+    user.authentication.resetVia = "email";
+  } else {
+    user.authentication.phoneOTP = {
+      code: otp,
+      expireAt: new Date(Date.now() + 3 * 60 * 1000),
+    };
+    user.authentication.resetVia = "phone";
+  }
+
   await user.save();
 
-  // 5️⃣ (Optional) Send OTP via Twilio
-  // await sendOtp(phone, otp.toString());
+  // 5️⃣ Send OTP
+  if (isEmail) {
+    const values = {
+      name: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      otp,
+      email: user.email ?? "",
+    };
 
-  return { phone, otp };
+    const template = emailTemplate.resetPassword(values);
+    await emailHelper.sendEmail(template);
+  } else {
+    await sendOtp(user.phone!, otp.toString());
+  }
+
+  return {
+    identifier,
+    via: user.authentication.resetVia,
+  };
 };
+
 
 
 
@@ -602,6 +928,80 @@ const archiveUserInDB = async (userId: string) => {
 };
 
 
+const googleClient = new OAuth2Client(config.social.google_client_id);
+
+export const googleLoginToDB = async (idToken: string, role: string) => {
+  const ticket = await googleClient.verifyIdToken({
+    idToken,
+    audience: config.social.google_client_id,
+  });
+
+  const payload = ticket.getPayload();
+
+  if (!payload?.email || !payload.email_verified) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid or unverified Google account");
+  }
+
+  const email = payload.email.toLowerCase();
+  const googleId = payload.sub;
+
+  let isFirstLogin = false;
+  let user = await User.findOne({ email });
+
+  //  Prevent Google ID mismatch
+  if (user?.googleId && user.googleId !== googleId) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Google account mismatch");
+  }
+
+  //  First-time Google signup
+  if (!user) {
+    const [referenceId, customUserId] = await Promise.all([
+      createUniqueReferralId(),
+      generateCustomUserId(role === USER_ROLES.MERCENT ? USER_ROLES.MERCENT : USER_ROLES.USER),
+    ]);
+
+    user = await User.create({
+      referenceId,
+      customUserId,
+      email,
+      firstName: payload.name,
+      profile: payload.picture ?? null,
+      googleId,
+      authProviders: ["google"],
+      verified: true,
+      role: role === USER_ROLES.MERCENT ? USER_ROLES.MERCENT : USER_ROLES.USER,
+    });
+
+    isFirstLogin = true;
+  }
+
+  //  Link Google to existing non-password user
+  else if (!user.googleId) {
+    if (user.authProviders.includes("local")) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        "Account exists. Login with password to link Google."
+      );
+    }
+
+    user.googleId = googleId;
+    user.authProviders.push("google");
+    await user.save();
+  }
+
+
+  const accessToken = jwtHelper.createToken(
+    { id: user._id, role: user.role, email: user.email },
+    config.jwt.jwt_secret!,
+    config.jwt.jwt_expire_in!
+  );
+
+  return {
+    accessToken,
+    subscription: user.subscription,
+    isFirstLogin,
+  };
+};
 export const AuthService = {
   // verifyEmailToDB,
   loginUserFromDB,
@@ -613,8 +1013,9 @@ export const AuthService = {
   // socialLoginFromDB,
   deleteUserFromDB,
   deleteOwnUserAccount,
-  sendPhoneOtpToDB,
-  verifyPhoneOtpToDB,
+  resendOtpToDB,
+  verifyOtpToDB,
   uploadDocumentImagesToDB,
-  archiveUserInDB
+  archiveUserInDB,
+  googleLoginToDB
 };

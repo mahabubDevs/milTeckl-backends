@@ -15,12 +15,19 @@ import { Subscription } from "../subscription/subscription.model";
 import { IPackage } from "../shopAuraSubscription/aurashop.interface";
 
 import { createUniqueReferralId } from "../../../util/generateRefferalId";
+// import { sendOtp } from "../../../config/m3sms";
 import { sendOtp } from "../../../config/veevoTechOtp";
 import { generateCustomUserId } from "./user.utils";
 import Referral from "../referral/referral.model";
+import { sendNotification } from "../../../helpers/notificationsHelper";
+import { NotificationType } from "../notification/notification.model";
+
+
+
 
 interface IPackageWithId extends IPackage {
   _id: string;
+  isFreeTrial?: boolean;
 }
 
 const createAdminToDB = async (payload: any): Promise<IUser> => {
@@ -29,6 +36,7 @@ const createAdminToDB = async (payload: any): Promise<IUser> => {
   if (isExistAdmin) {
     throw new ApiError(StatusCodes.CONFLICT, "This Email already taken");
   }
+  // create admin data
   const referenceId = await createUniqueReferralId();
   const adminData = {
     ...payload,
@@ -54,69 +62,70 @@ const createUserToDB = async (payload: CreateUserPayload): Promise<IUser> => {
   const isExitByEmail = await User.isExistUserByEmail(payload.email as string);
   const isExitByPhone = await User.isExistUserByPhone(payload.phone as string);
 
-  if (isExitByEmail || isExitByPhone) {
+  // ✅ If verified user exists → throw error (same as old logic)
+  if ((isExitByEmail && isExitByEmail.verified) || (isExitByPhone && isExitByPhone.verified)) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User Already Exist");
   }
 
+  let user: IUser | null = null;
 
-
-
-
-  // 2️⃣ Create user data
-  const referenceId = await createUniqueReferralId();
-  const customUserId = await generateCustomUserId(payload.role as string);
-
-
-
-  const userData = {
-    ...payload,
-    referenceId,
-    customUserId,
-    status:
-      payload.role === USER_ROLES.MERCENT
-        ? USER_STATUS.INACTIVE
-        : USER_STATUS.ACTIVE,
-
-    ...(payload.role === USER_ROLES.MERCENT && {
-      approveStatus: APPROVE_STATUS.PENDING,
-    }),
-  };
-
-  const createUser = await User.create(userData);
-  if (!createUser) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
-  }
-
-
-  let referredInfo;
-  if (payload?.referredId) {
-    const referrer = await User.findOne({ referenceId: payload.referredId });
-    if (!referrer) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, "Referred Id Invalied!");
+  // 2️⃣ Update existing user
+  if (isExitByEmail || isExitByPhone) {
+    const existingUser = isExitByEmail || isExitByPhone;
+    user = await User.findByIdAndUpdate(existingUser._id, payload, { new: true });
+    if (!user) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to update existing user");
     }
-    referredInfo = {
-      referredId: payload.referredId,
-      referredBy: `${referrer.firstName} ${referrer?.lastName ? referrer?.lastName : ""}`,
+  } else {
+    // 3️⃣ Create new user
+    const referenceId = await createUniqueReferralId();
+    const customUserId = await generateCustomUserId(payload.role as string);
+
+    const userData = {
+      ...payload,
+      referenceId,
+      customUserId,
+      status:
+        payload.role === USER_ROLES.MERCENT
+          ? USER_STATUS.INACTIVE
+          : USER_STATUS.ACTIVE,
+      ...(payload.role === USER_ROLES.MERCENT && {
+        approveStatus: APPROVE_STATUS.PENDING,
+      }),
     };
 
-    const result = await User.findByIdAndUpdate(createUser._id, {
-      $set: {
-        referredInfo,
-      },
-    });
-    if (!result) {
-      throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to update user referredInfo");
+    user = await User.create(userData);
+    if (!user) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Failed to create user");
     }
+  }
+
+  // 4️⃣ Handle referral if exists
+  if (payload?.referredId && !user.referredInfo) {
+    const referrer = await User.findOne({ referenceId: payload.referredId });
+    if (!referrer) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, "Referred Id Invalid!");
+    }
+
+    const referredInfo = {
+      referredId: payload.referredId,
+      referredBy: `${referrer.firstName} ${referrer.lastName || ""}`,
+      referredUserId: referrer._id, // ✅ ObjectId stored for referral logic
+    };
+
+    await User.findByIdAndUpdate(user._id, { $set: { referredInfo } });
+
     await Referral.create({
       referrer: referrer._id,
-      referredUser: result._id,
+      referredUser: user._id,
     });
   }
-  // 3️⃣ Generate OTP
+
+  // 5️⃣ Generate OTP
   const otp = generateOTP();
 
-  // 4️⃣ Save OTP to DB
-  await User.findByIdAndUpdate(createUser._id, {
+  // 6️⃣ Save OTP to DB
+  await User.findByIdAndUpdate(user._id, {
     $set: {
       "authentication.phoneOTP": {
         code: otp,
@@ -127,42 +136,57 @@ const createUserToDB = async (payload: CreateUserPayload): Promise<IUser> => {
 
   console.log("Generated OTP for user:", otp);
 
-  // 5️⃣ Send OTP via VeevoTech API
-  if (createUser.phone) {
+  // 7️⃣ Send OTP via VeevoTech API
+  if (user.phone) {
     try {
-      await sendOtp(createUser.phone, otp.toString());
-      console.log(`OTP sent to phone: ${createUser.phone}`);
+      await sendOtp(user.phone, otp.toString());
+      console.log(`OTP sent to phone: ${user.phone}`);
     } catch (error) {
       console.error("Failed to send OTP via VeevoTech:", error);
     }
   } else {
-    console.warn("⚠️ No phone number found for user:", createUser._id);
+    console.warn("⚠️ No phone number found for user:", user._id);
   }
 
-  return createUser;
+  // 8️⃣ Notify Super Admin
+  const superAdmin = await User.findOne({ role: USER_ROLES.SUPER_ADMIN }).select("_id");
+  if (superAdmin) {
+    sendNotification({
+      userIds: [superAdmin._id.toString()],
+      title: "A new user has registered/updated",
+      body: `User ${user.firstName} has registered or updated with the role ${user.role}.`,
+      type: NotificationType.SYSTEM,
+    });
+  }
+
+  return user;
 };
+
+
 
 
 
 const getUserProfileFromDB = async (
   user: JwtPayload
-): Promise<Partial<IUser> & { totalPigeons: number; subscriptions: any[] }> => {
+): Promise<
+  Partial<IUser> & {
+    subscriptions: any[];
+    totalSubscriptions: number;
+    hasUsedFreePlan: boolean;
+  }
+> => {
   const { _id } = user;
 
-  // 1️⃣ Check if user exists
   const isExistUser: any = await User.isExistUserById(_id);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  // 2️⃣ Count total pigeons (pages array)
-
-  // populate er por type define kora holo
   const subscriptions = await Subscription.find({ user: _id }).populate<{
     package: IPackageWithId | null;
   }>({
     path: "package",
-    select: "title price duration",
+    select: "title price duration isFreeTrial",
   });
 
   const formattedSubscriptions = subscriptions.map((sub) => ({
@@ -177,42 +201,69 @@ const getUserProfileFromDB = async (
     trxId: sub.trxId,
     subscriptionStripeId: sub.subscriptionId,
   }));
-  // 5️⃣ Total subscriptions
-  const totalSubscriptions = subscriptions.length;
-  // 5️⃣ Return combined profile + subscriptions + totalPigeons
+
+  // 🔥 Check free plan usage
+  const hasUsedFreePlan = subscriptions.some(
+    (sub) => sub.package?.isFreeTrial === true
+  );
+
   return {
     ...isExistUser.toObject(),
-
     subscriptions: formattedSubscriptions,
-    totalSubscriptions,
+    totalSubscriptions: subscriptions.length,
+    hasUsedFreePlan, // ✅ NEW FIELD
   };
 };
+
 
 const updateProfileToDB = async (
   user: JwtPayload,
   payload: Partial<IUser>
 ): Promise<Partial<IUser | null>> => {
   const { _id } = user;
+
   const isExistUser = await User.isExistUserById(_id);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  //unlink file here
-  if (payload.profile) {
+  // unlink old files
+  if (payload.profile && isExistUser.profile) {
     unlinkFile(isExistUser.profile);
   }
-  if (payload.photo) {
+
+  if (payload.photo && isExistUser.photo) {
     unlinkFile(isExistUser.photo);
   }
 
-  const updateDoc = await User.findOneAndUpdate({ _id: _id }, payload, {
-    new: true,
-    runValidators: true,
-  });
+  try {
+    const updateDoc = await User.findOneAndUpdate(
+      { _id },
+      payload,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
-  return updateDoc;
+    return updateDoc;
+  } catch (error: any) {
+    /* -----------------------------
+       🔴 Handle Duplicate Key Error
+    ------------------------------*/
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0];
+
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        `This ${field} already exists`
+      );
+    }
+
+    throw error;
+  }
 };
+
 
 const getUserOnlineStatusFromDB = async (userId: string) => {
   const user = await User.findById(userId);

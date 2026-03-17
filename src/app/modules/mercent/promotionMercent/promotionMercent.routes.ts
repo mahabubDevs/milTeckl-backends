@@ -8,6 +8,7 @@ import { USER_ROLES } from "../../../../enums/user";
 
 import { PromotionValidations } from "./promotionMercent.validation";
 import validateRequest from "../../../middlewares/validateRequest";
+import { canAccessMerchantProfile } from "../../../middlewares/accessMerchentProfile";
 
 const router = Router();
 
@@ -20,10 +21,10 @@ router.get(
   PromotionController.getPromotionsByUserCategory
 );
 
-router.get("/merchants/:id", PromotionController.getDetailsOfMerchant);
+router.get("/merchants/:id", auth(), PromotionController.getDetailsOfMerchant);
 router.get(
   "/merchants",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT, USER_ROLES.VIEW_MERCENT, USER_ROLES.ADMIN_MERCENT), canAccessMerchantProfile,
   PromotionController.getAllPromotionsOfAMerchant
 );
 router.get(
@@ -35,7 +36,7 @@ router.get(
 
 router.post(
   "/",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT, USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   fileUploadHandler(),
   PromotionController.createPromotion
 );
@@ -44,17 +45,22 @@ router.get("/", auth(), PromotionController.getAllPromotions);
 
 //logit add for all user promotion fetching
 
+// router.get(
+//   "/user-promotions",
+//   auth(),
+//   PromotionController.getPromotionsForUser
+// );
 router.get(
-  "/user-promotions",
+  "/user-combine-promotions",
   auth(),
-  PromotionController.getPromotionsForUser
+  PromotionController.getCombinePromotionsForUser
 );
 
 router.get("/:id", auth(), PromotionController.getSinglePromotion);
 
 router.patch(
   "/:id",
-  auth(USER_ROLES.MERCENT),
+  auth(USER_ROLES.MERCENT,USER_ROLES.ADMIN_MERCENT),canAccessMerchantProfile,
   fileUploadHandler(),
   PromotionController.updatePromotion
 );

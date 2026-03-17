@@ -13,6 +13,7 @@ import { sendNotification } from "../../../../helpers/notificationsHelper";
 import { resolveCustomerIdsBySegment } from "../../../../util/customerSegmentation";
 import { NotificationType } from "../../notification/notification.model";
 import { CUSTOMER_SEGMENT } from "../../../../enums/user";
+import { MerchantCustomer } from "../merchantCustomer/merchantCustomer.model";
 
 const generatePromotionCode = (length = 6) => {
   const chars = "0123456789";
@@ -100,33 +101,38 @@ const getDistanceInKm = (lat1: number, lon1: number, lat2: number, lon2: number)
 
 
 const getUserSegment = async (userId: string) => {
-  const purchases = await Sell.find({ userId, status: "completed" }).sort({ createdAt: -1 });
+  const purchases = await Sell.find({ userId, status: "completed" }).sort({ createdAt: -1 }).lean();
 
   const totalPurchases = purchases.length;
   const last6MonthsPurchases = purchases.filter(
-    p => new Date(p.createdAt) > new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)
+    (p: any) => new Date(p.createdAt) > new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)
   );
 
-  const totalSpend = purchases.reduce((sum, p) => sum + p.totalBill, 0);
-  const avgSpend = 1000;
+  const totalSpend = purchases.reduce((sum, p: any) => sum + p.totalBill, 0);
+
+  const avgSpend = 10000;
 
   let segment: string;
   if (totalPurchases === 0 || (totalPurchases === 1 && purchases[0].createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) {
     segment = "new_customer";
   } else if (totalPurchases >= 2 && last6MonthsPurchases.length < 5) {
     segment = "returning_customer";
-  } else if (last6MonthsPurchases.length >= 5 || totalSpend >= 1.5 * avgSpend) {
-    segment = "loyal_customer";
   } else if (last6MonthsPurchases.length >= 20 || totalSpend >= 3 * avgSpend) {
     segment = "vip_customer";
-  } else {
+  }  else if (last6MonthsPurchases.length >= 5 || totalSpend >= 1.5 * avgSpend) {
+    segment = "loyal_customer";
+  }else {
     segment = "all_customer";
   }
 
   return segment; // ✅ শুধু string
 };
 
-
+// const getUserSegmentUpdate = async (userId: string, merchantId: string) => {
+//   const customer = await MerchantCustomer.findOne({ userId, merchantId }).select("segment");
+//   console.log("Customer segment from DB:", customer?.segment);
+//   return customer?.segment || "new_customer"; // default
+// };
 
 const getSinglePromotionFromDB = async (
   id: string
@@ -190,86 +196,119 @@ const getPopularMerchantsFromDB = async () => {
 };
 
 
+const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
 const getDetailsOfMerchant = async (merchantId: string, userId?: string) => {
+  console.log("========== API START: getDetailsOfMerchant ==========");
+  console.log("merchantId:", merchantId);
+  console.log("userId:", userId);
+
   // 1️⃣ Increment merchant visits
   await User.updateOne({ _id: merchantId }, { $inc: { totalVisits: 1 } });
+  console.log("✔ Merchant visit count incremented");
 
-  // 2️⃣ Fetch merchant details
-  const merchant = await User.findById(merchantId)
-    .select("firstName location profile photo about website address")
+  // 2️⃣ Load merchant
+  const merchant: any = await User.findById(merchantId)
+    .select("firstName businessName location profile photo about website address")
     .lean();
 
-  // 3️⃣ Fetch all promotions of merchant
-  let promotions = await Promotion.find({ merchantId })
-    .select("cardId name discountPercentage startDate endDate image status availableDays customerSegment")
-    .lean();
+  if (!merchant) throw new ApiError(StatusCodes.NOT_FOUND, "Merchant not found");
 
-  // 4️⃣ Today date & day
-  const today = new Date();
-  const dayMap = ["sun","mon","tue","wed","thu","fri","sat"];
-  const todayDay = dayMap[today.getDay()];
+  merchant.merchantName = merchant.businessName || merchant.firstName;
+  merchant.availablePoints = 0;
+  merchant.digitalCardId = ""; // default
+  console.log(`✔ Merchant loaded: ${merchant.merchantName}`);
 
+  let userSegment = "all_customer";
+  let boughtPromotionIds: string[] = [];
+  let userRatings: Record<string, number> = {};
+
+  /* ================= USER CONTEXT ================= */
   if (userId) {
-    // 5️⃣ Logged-in user: check active user
-    const activeUser = await User.findById(userId).select("_id status");
-    if (!activeUser || activeUser.status !== "active") {
-      throw new ApiError(StatusCodes.UNAUTHORIZED, "User not active");
+    const activeUser: any = await User.findById(userId).select("_id status").lean();
+    console.log("User status:", activeUser?.status);
+
+    if (activeUser?.status === "active") {
+      userSegment = await getUserSegment(userId);
+      console.log("✔ User segment:", userSegment);
+
+      // 🔹 Fetch user's digital card for this merchant
+      const digitalCard = await DigitalCard.findOne({ userId, merchantId }).lean();
+
+      // ✅ Attach digitalCardId
+      merchant.digitalCardId = digitalCard?._id.toString() || "";
+      console.log("✔ User's digitalCardId:", merchant.digitalCardId);
+
+      // 🔹 Bought promotion IDs
+      boughtPromotionIds = digitalCard?.promotions
+        .map((p) => p.promotionId?.toString())
+        .filter((id): id is string => !!id) || [];
+      console.log("✔ Bought promotion IDs from DigitalCard:", boughtPromotionIds);
+
+      // 🔹 Fetch ratings for bought promotions
+      const ratings = await Rating.find({
+        merchantId,
+        userId,
+        promotionId: { $in: boughtPromotionIds },
+      })
+        .select("promotionId rating")
+        .lean();
+
+      ratings.forEach((r: any) => {
+        if (r.promotionId) userRatings[r.promotionId.toString()] = r.rating;
+      });
+      console.log("✔ User ratings map:", userRatings);
     }
-
-    // 6️⃣ Get user segment
-    const userSegment = await getUserSegment(userId);
-
-    // 7️⃣ Fetch user's digital cards
-    const digitalCards = await DigitalCard.find({ userId }).select("promotions");
-    const existingPromotionIds = digitalCards.flatMap(card =>
-      card.promotions.map(p => p.promotionId?.toString()).filter(Boolean) as string[]
-    );
-
-    // 8️⃣ Filter promotions for logged-in user
-    promotions = promotions.filter(promo => {
-      const startDate = new Date(promo.startDate);
-      const endDate = new Date(promo.endDate);
-      const days = promo.availableDays || [];
-
-      const isValidDate = today >= startDate && today <= endDate;
-      const isValidDay = days.includes("all") || days.includes(todayDay);
-      const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
-      const isSegmentMatch = !promo.customerSegment || ["all_customer", userSegment].includes(promo.customerSegment);
-
-      return promo.status === "active" && isValidDate && isValidDay && isNotInUserCard && isSegmentMatch;
-    });
-
-  } else {
-    // 9️⃣ Guest user: basic filtering
-    promotions = promotions.filter(promo => {
-      const startDate = new Date(promo.startDate);
-      const endDate = new Date(promo.endDate);
-      const days = promo.availableDays || [];
-
-      const isValidDate = today >= startDate && today <= endDate;
-      const isValidDay = days.includes("all") || days.includes(todayDay);
-      const isSegmentMatch = !promo.customerSegment || promo.customerSegment === "all_customer";
-
-      return promo.status === "active" && isValidDate && isValidDay && isSegmentMatch;
-    });
   }
 
+  /* ================= PROMOTIONS ================= */
+  const promotions = (await Promotion.find({ merchantId })
+    .select("name discountPercentage startDate endDate image status availableDays customerSegment")
+    .lean())
+    .map((promo) => {
+      const today = new Date();
+      const todayDay = dayMap[today.getDay()];
+      const promoId = promo._id.toString();
+
+      const isBought = boughtPromotionIds.includes(promoId);
+
+      const isValidDate = today >= new Date(promo.startDate) && today <= new Date(promo.endDate);
+      const isValidDay = promo.availableDays?.includes("all") || promo.availableDays?.includes(todayDay);
+      const isValid = promo.status === "active" && isValidDate && isValidDay;
+
+      const segmentMatch =
+        promo.customerSegment?.includes("all") || promo.customerSegment?.includes(userSegment);
+
+      const shouldShow = isBought || (segmentMatch && isValid);
+
+      if (!isBought && !segmentMatch) return null;
+
+      return {
+        ...promo,
+        buy: isBought,
+        show: shouldShow,
+        rating: isBought ? userRatings[promoId] ?? 0 : 0,
+      };
+    })
+    .filter(Boolean);
+
+  console.log("✔ Total promotions found:", promotions.length);
+
+  console.log("========== API END ==========");
   return { merchant, promotions };
 };
 
 
 
-
-
 const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
-  // 1. Get user's digital card (points)
+  // 1. Get user's digital card
   const digitalCard = await DigitalCard.findOne({
     userId,
     merchantId,
-  }).select("availablePoints");
+  }).select("lifeTimeEarnPoints");
 
-  // Error throw বাদ দিয়ে default 0 points
-  const availablePoints = digitalCard?.availablePoints ?? 0;
+  // Use lifetimeEarnPoints
+  const availablePoints = digitalCard?.lifeTimeEarnPoints ?? 0;
 
   // 2. Calculate total spent for this merchant
   const spendAgg = await Sell.aggregate([
@@ -298,14 +337,14 @@ const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
 
   if (!tiers.length) {
     return {
-      availablePoints,
+      availablePoints,  // lifetime points shown here
       totalSpend,
       tierName: "No tiers defined",
       rewardText: "N/A",
     };
   }
 
-  // 4. Determine user's tier based on both conditions
+  // 4. Determine user's tier based on lifetime points and spend
   let userTier: any = null;
 
   for (const tier of tiers) {
@@ -313,58 +352,72 @@ const getUserTierOfMerchant = async (userId: string, merchantId: string) => {
     const meetsSpend = totalSpend >= tier.minTotalSpend;
 
     if (meetsPoints && meetsSpend) {
-      userTier = tier; // keep looping to get the highest eligible tier
+      userTier = tier; // keep highest eligible tier
     }
   }
 
   return {
-  availablePoints,
-  totalSpend,
-  tierName: userTier?.name ?? "No tier yet",
-  rewardText: userTier?.reward ?? "No reward",
-};
+    availablePoints,  // lifetime points
+    totalSpend,
+    tierName: userTier?.name ?? "No tier yet",
+    rewardText: userTier?.reward ?? "No reward",
+  };
 };
 
 
 //catagory based promotion fetching
 const getPromotionsByUserCategory = async (categoryName: string, userId?: string) => {
   if (!categoryName) throw new Error("Category name is required");
+  console.log("Category Name:", categoryName);
 
   // 1️⃣ Find merchants by category
-  const merchants = await User.find(
-    { service: { $regex: new RegExp(categoryName, "i") } },
-    { _id: 1 }
-  );
+  const normalizedCategory = categoryName.replace(/&/g, 'and').trim();
+const merchants = await User.find(
+  { service: { $regex: new RegExp(normalizedCategory, "i") } },
+  { _id: 1 }
+);
+  console.log("Merchants found:", merchants.length);
 
   if (merchants.length === 0) return [];
 
   const merchantIds = merchants.map((m) => new Types.ObjectId(m._id));
+  console.log("Merchant IDs:", merchantIds);
 
   // 2️⃣ Find all promotions from these merchants
   let promotions = await Promotion.find({ merchantId: { $in: merchantIds } })
     .select("cardId name discountPercentage startDate endDate image status availableDays customerSegment")
     .lean();
+  console.log("Total Promotions found:", promotions.length);
 
   // 3️⃣ Today & day
   const today = new Date();
   const dayMap = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   const todayDay = dayMap[today.getDay()];
+  console.log("Today:", today.toDateString(), "Day:", todayDay);
 
   if (userId) {
     // 4️⃣ Logged-in user
     const activeUser = await User.findById(userId).select("_id status");
+    console.log("Active User:", activeUser);
+
     if (!activeUser || activeUser.status !== "active") {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "User not active");
     }
 
     // 5️⃣ User segment
     const userSegment = await getUserSegment(userId);
+    console.log("User Segment:", userSegment);
 
     // 6️⃣ User's digital cards
     const digitalCards = await DigitalCard.find({ userId }).select("promotions");
+    console.log("Digital Cards count:", digitalCards.length);
+
     const existingPromotionIds = digitalCards.flatMap(card =>
-      card.promotions.map(p => p.promotionId?.toString()).filter(Boolean) as string[]
+      card.promotions
+        .filter((p: any) => p.promotionId)
+        .map((p: any) => p.promotionId.toString()) as string[]
     );
+    console.log("Existing Promotion IDs in user's cards:", existingPromotionIds);
 
     // 7️⃣ Filter promotions
     promotions = promotions.filter(promo => {
@@ -377,7 +430,10 @@ const getPromotionsByUserCategory = async (categoryName: string, userId?: string
       const isNotInUserCard = !existingPromotionIds.includes(promo._id.toString());
       const isSegmentMatch = !promo.customerSegment || ["all_customer", userSegment].includes(promo.customerSegment);
 
-      return promo.status === "active" && isValidDate && isValidDay && isNotInUserCard && isSegmentMatch;
+      const includePromo = promo.status === "active" && isValidDate && isValidDay && isNotInUserCard && isSegmentMatch;
+      console.log(`Promo: ${promo.name}, Active: ${promo.status}, ValidDate: ${isValidDate}, ValidDay: ${isValidDay}, NotInCard: ${isNotInUserCard}, SegmentMatch: ${isSegmentMatch}, Include: ${includePromo}`);
+
+      return includePromo;
     });
 
   } else {
@@ -391,10 +447,14 @@ const getPromotionsByUserCategory = async (categoryName: string, userId?: string
       const isValidDay = days.includes("all") || days.includes(todayDay);
       const isSegmentMatch = !promo.customerSegment || promo.customerSegment === "all_customer";
 
-      return promo.status === "active" && isValidDate && isValidDay && isSegmentMatch;
+      const includePromo = promo.status === "active" && isValidDate && isValidDay && isSegmentMatch;
+      console.log(`Guest Promo: ${promo.name}, Active: ${promo.status}, ValidDate: ${isValidDate}, ValidDay: ${isValidDay}, SegmentMatch: ${isSegmentMatch}, Include: ${includePromo}`);
+
+      return includePromo;
     });
   }
 
+  console.log("Filtered Promotions Count:", promotions.length);
   return promotions;
 };
 
@@ -444,6 +504,10 @@ const sendNotificationToCustomer = async (
   return { sent: customers.length };
 };
 
+
+
+
+
 export const PromotionService = {
   createPromotionToDB,
   updatePromotionToDB,
@@ -459,6 +523,7 @@ export const PromotionService = {
   getUserSegment,
   getAllPromotionsOfAMerchant,
   sendNotificationToCustomer,
+  // getUserSegmentUpdate,
 };
 
 

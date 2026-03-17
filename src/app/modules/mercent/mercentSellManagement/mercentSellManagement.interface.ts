@@ -33,6 +33,7 @@ export interface ISell {
   status: "completed" | "pending";
   createdAt: Date;
   updatedAt: Date;
+  approvalExpiresAt?: Date;
 }
 
 // Existing interfaces kept intact
