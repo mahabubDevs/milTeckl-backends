@@ -26,44 +26,59 @@ const sendNotificationToAllUsers = async (
     console.log("[Notification] Payload received:", payload);
     console.log("[Notification] Admin ID:", adminId);
 
-    // 1️⃣ Base filter: Only users with fcmToken
-    const userFilter: any = { fcmToken: { $exists: true, $ne: null },
-    // "notificationSettings.pushNotifications": true 
-  };
+    const users2 = await User.find({}).select("firstName lastName").lean();
+    console.log("[Notification] Total users in system:", users2.length);
 
-    // 2️⃣ Role filter based on sendType
+    // users যারা fcmToken আছে
+    const usersWithToken = await User.find({
+      fcmToken: { $exists: true, $nin: [null, ""] },
+    })
+      .select("fcmToken")
+      .lean();
+
+    console.log("[Notification] Total users with fcmToken:", usersWithToken.length);
+
+    // 1️⃣ Fetch all users who have fcmToken
+    const allUsersWithToken = await User.find({
+      fcmToken: { $exists: true, $ne: null },
+    }).select("fcmToken _id role subscription status city country tier");
+
+    console.log("[Notification] All users with fcmToken (before filter):", allUsersWithToken);
+
+    // 2️⃣ Build filter
+    const userFilter: any = { fcmToken: { $exists: true, $ne: null } };
+
     if (sendType === "MERCENT") userFilter.role = "MERCENT";
     else if (sendType === "USER") userFilter.role = "USER";
-    // if sendType is ALL, no role filter (send to all users)
 
-    // ✅ City filter only for merchant or user
     if (city && (sendType === "MERCENT" || sendType === "USER")) {
       userFilter.city = { $regex: `^${city}$`, $options: "i" };
     }
-
-    // 3️⃣ Optional filters (same as before)
     if (country) userFilter.country = { $regex: `^${country}$`, $options: "i" };
     if (tier) userFilter.tier = tier.toUpperCase();
     if (subscriptionType)
       userFilter.subscription = { $regex: `^${subscriptionType}$`, $options: "i" };
-    if (status) userFilter.status = { $regex: `^${status}$`, $options: "i" };
+    if (status)
+      userFilter.status = { $regex: `^${status}$`, $options: "i" };
 
     console.log("[Notification] Final user filter:", userFilter);
 
-    // 4️⃣ Fetch users
-    const users = await User.find(userFilter).select("fcmToken _id");
-    console.log(`[Notification] Users fetched: ${users.length}`);
+    // 3️⃣ Fetch users after filter
+    const filteredUsers = await User.find(userFilter).select("fcmToken _id");
+
+    console.log("[Notification] Users after applying filter:", filteredUsers);
 
     const tokens: string[] = [];
-    console.log("[Notification] Processing user tokens...", users);
     const userIds: Types.ObjectId[] = [];
 
-    users.forEach((u) => {
+    filteredUsers.forEach((u) => {
       if (u.fcmToken) {
         tokens.push(u.fcmToken);
         userIds.push(u._id);
       }
     });
+
+    console.log("[Notification] Tokens to send:", tokens);
 
     if (tokens.length === 0) {
       return {
@@ -73,11 +88,11 @@ const sendNotificationToAllUsers = async (
       };
     }
 
-    // 5️⃣ Send push via Firebase
+    // 4️⃣ Send push via Firebase
     const message = { notification: { title, body }, tokens };
     const response = await admin.messaging().sendEachForMulticast(message);
 
-    // 6️⃣ Save notification in DB
+    // 5️⃣ Save notification in DB
     await sendNotification({
       userIds,
       title,
@@ -86,34 +101,42 @@ const sendNotificationToAllUsers = async (
       metadata: { sentBy: adminId },
       channel: { socket: true, push: true },
     });
+
     console.log("[Notification] Notification records created");
 
-    // 7️⃣ Remove invalid tokens
-    if (response.failureCount > 0) {
-      const failedTokens: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) failedTokens.push(tokens[idx]);
-      });
+    // 6️⃣ Log successful and failed tokens
+    const successfulTokens: string[] = [];
+    const failedTokens: string[] = [];
 
-      if (failedTokens.length > 0) {
-        await User.updateMany(
-          { fcmToken: { $in: failedTokens } },
-          { $unset: { fcmToken: "" } }
-        );
-        console.log(`[Notification] Removed ${failedTokens.length} invalid tokens`);
-      }
-    }
+    response.responses.forEach((resp, idx) => {
+  if (resp.success) {
+    successfulTokens.push(tokens[idx]);
+  } else {
+    failedTokens.push(tokens[idx]);
+
+    // 🔥 IMPORTANT DEBUG (এখানেই add করবা)
+    console.log("❌ Failed Token:", tokens[idx]);
+    console.log("🔥 Error Code:", resp.error?.code);
+    console.log("🔥 Error Message:", resp.error?.message);
+  }
+});
+
+    console.log("[Notification] Successfully sent tokens:", successfulTokens);
+    console.log("[Notification] Failed tokens:", failedTokens);
+
+    // ❌ DELETE PART REMOVED
 
     return {
       sentCount: response.successCount,
       failedCount: response.failureCount,
+      successfulTokens,
+      failedTokens,
     };
   } catch (error) {
     console.error("[Notification] Error sending push:", error);
     throw new Error("Failed to send push notification");
   }
 };
-
 
 
 
