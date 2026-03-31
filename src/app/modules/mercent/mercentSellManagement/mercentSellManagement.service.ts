@@ -211,7 +211,7 @@ const checkout = async (
 
   if (!digitalCard) throw new Error("Digital Card not found");
 
-  console.log("✅ DigitalCard found:", digitalCardCode, "UserID:", digitalCard.userId.toString());
+
 
 
 
@@ -279,6 +279,35 @@ const checkout = async (
     });
   }
 
+
+  // ==============================
+  //  Tier upergread 
+  // ==============================
+
+
+  const nextTier = await Tier.findOne({
+    admin: merchantId,
+    isActive: true,
+    pointsThreshold: { $lte: digitalCard.lifeTimeEarnPoints || 0 },
+  }).sort({ pointsThreshold: -1 });
+
+  console.log("✅ User Tier:", nextTier ? nextTier.name : "No tier");
+
+
+  const upcomingTier = await Tier.findOne({
+  admin: merchantId,
+  isActive: true,
+  pointsThreshold: { $gt: digitalCard.lifeTimeEarnPoints || 0 },
+}).sort({ pointsThreshold: 1 }); // smallest threshold first
+
+  console.log("✅ Upcoming Tier:", upcomingTier ? upcomingTier.name : "No upcoming tier");
+  console.log("✅ Points to next tier:", upcomingTier ? upcomingTier.pointsThreshold - (digitalCard.lifeTimeEarnPoints || 0) : "N/A");
+  console.log("✅ Next tier reward:", upcomingTier ? upcomingTier.reward : "N/A");
+
+
+
+
+  
   // ===============================
   // 💰 Bill Calculation
   // ===============================
@@ -318,15 +347,25 @@ const checkout = async (
   }).sort({ pointsThreshold: -1 });
 
   const accumulationPercentage = userTier?.accumulationRule || 0;
-
   const eligibleAmount = (netBillForPoint * accumulationPercentage) / 100;
-  const pointsEarned = parseFloat((eligibleAmount / POINT_EARN_RATE).toFixed(4));
 
-  console.log("🔹 Tier:", userTier?.name || "N/A");
-  console.log("🔹 Accumulation %:", accumulationPercentage);
-  console.log("🔹 Net Bill For Point:", netBillForPoint);
-  console.log("🔹 Eligible Amount:", eligibleAmount);
+
+  let pointsEarned = parseFloat((eligibleAmount / POINT_EARN_RATE).toFixed(4));
+
+ 
+  if (upcomingTier && (eligibleAmount + (digitalCard.lifeTimeEarnPoints || 0) >= upcomingTier.pointsThreshold)) {
+   
+    const additionalRewardPoints = Number(upcomingTier.reward) || 0;
+
+   
+    pointsEarned = parseFloat((pointsEarned + additionalRewardPoints).toFixed(4));
+  }
+
   console.log("🔹 Points Earned:", pointsEarned);
+ 
+
+
+
 
   // ===============================
   // 🔹 Approval condition
@@ -369,7 +408,7 @@ const approvalExpiresAt = needApproval
     approvalExpiresAt,
   });
 
-  console.log("✅ Sell created:", sell._id.toString(), "Status:", sell.status);
+
 
   // ===============================
   // 🔔 Update Digital Card Points
@@ -506,6 +545,26 @@ const requestApproval = async ({
   const POINT_EARN_RATE = 10;    // 10 taka = 1 point
   const POINT_REDEEM_RATE = 10;  // 1 point = 10 taka
 
+
+
+// -----------------------------
+  // 🔹 Check if merchant has at least one active tier
+  // -----------------------------
+  const activeTierExists = await Tier.exists({
+    admin: merchantId,
+    isActive: true,
+  });
+
+  if (!activeTierExists) {
+    throw new Error(
+      "Merchant has no active tier. Please create a tier before processing sales."
+    );
+  }
+
+
+
+
+
   let digitalCard: any = null;
 
   // 🔹 Normalize promotionId to array
@@ -516,13 +575,7 @@ const requestApproval = async ({
       : [promotionId];
   }
 
-  console.log("🟢 requestApproval called with:", {
-    merchantId,
-    digitalCardCode,
-    appliedPromotionIds,
-    totalBill,
-    pointRedeemed,
-  });
+
 
   // ===============================
   // 🔍 Find Digital Card
