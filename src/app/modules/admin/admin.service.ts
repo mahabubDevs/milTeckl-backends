@@ -13,6 +13,7 @@ import { Rating } from "../customer/rating/rating.model";
 import { sendPushNotification } from "../../../helpers/sendPushNotification";
 import { Subscription } from "../subscription/subscription.model";
 import { Sell } from "../mercent/mercentSellManagement/mercentSellManagement.model";
+import { DigitalCard } from "../customer/digitalCard/digitalCard.model";
 
 
 interface IQuery {
@@ -78,7 +79,7 @@ const updateUserStatus = async (id: string, status: USER_STATUS) => {
 const getAllCustomers = async (query: Record<string, unknown>) => {
   console.log("📥 Query:", query);
 
-  // 1️⃣ User data fetch
+  // 1️⃣ Fetch base users
   const baseQuery = User.find({ role: "USER" }).select(
     "customUserId firstName lastName phone email status address referredInfo.referredBy subscription"
   );
@@ -96,49 +97,50 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
 
   console.log("👥 Total Customers:", allcustomers.length);
 
-  // 2️⃣ Fetch latest subscription per user
   const userIds = allcustomers.map((u: any) => u._id.toString());
-
   console.log("🆔 User IDs:", userIds);
 
+  // 2️⃣ Fetch latest subscriptions per user
   const subscriptions = await Subscription.find({
     user: { $in: userIds },
   })
     .sort({ currentPeriodEnd: -1 })
     .lean();
 
-  console.log("📦 All Subscriptions:", subscriptions);
-
-  // 3️⃣ Map latest subscription per user
   const subscriptionMap: Record<string, any> = {};
-
   subscriptions.forEach((sub) => {
     const userId = sub.user.toString();
+    if (!subscriptionMap[userId]) subscriptionMap[userId] = sub;
+  });
 
-    if (!subscriptionMap[userId]) {
-      subscriptionMap[userId] = sub;
+  // 3️⃣ Fetch total points per user from DigitalCard
+  const digitalCards = await DigitalCard.find({ userId: { $in: userIds } }).lean();
+  const pointsMap: Record<string, number> = {};
+  digitalCards.forEach((card) => {
+    const userId = card.userId.toString();
+    pointsMap[userId] = (pointsMap[userId] || 0) + (card.lifeTimeEarnPoints || 0);
+  });
+
+  // 4️⃣ Fetch total sell amount per user
+  const sells = await Sell.find({ userId: { $in: userIds }, status: "completed" }).lean();
+  const sellMap: Record<string, number> = {};
+  sells.forEach((sell) => {
+    if (sell.userId) {
+      const userId = sell.userId.toString();
+      sellMap[userId] = (sellMap[userId] || 0) + (Number(sell.totalBill) || 0);
     }
   });
 
-  console.log("🗺️ Subscription Map:", subscriptionMap);
-
-  // 4️⃣ Merge subscription into user objects
   const now = new Date();
 
-  const customersWithSubscription = allcustomers.map((user) => {
+  // 5️⃣ Merge subscription, points, and total sell into user
+  const customersWithData = allcustomers.map((user) => {
     const subData = subscriptionMap[user._id.toString()] || null;
-
-    console.log("------------");
-    console.log("👤 User:", user.customUserId);
-    console.log("👉 User.subscription (DB):", user.subscription);
-    console.log("👉 Subscription Data:", subData);
 
     const isActive =
       subData &&
       subData.status === "active" &&
       new Date(subData.currentPeriodEnd) > now;
-
-    console.log("✅ Final Active?:", isActive);
 
     return {
       ...user,
@@ -152,16 +154,18 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
           }
         : null,
       subscription: isActive ? "active" : "inActive",
+      totalPoints: pointsMap[user._id.toString()] || 0,
+      totalSellAmount: sellMap[user._id.toString()] || 0,
     };
   });
 
   console.log(
-    "🎯 Final Customers:",
-    JSON.stringify(customersWithSubscription, null, 2)
+    "🎯 Final Customers with Points & Sell:",
+    JSON.stringify(customersWithData, null, 2)
   );
 
   return {
-    allcustomers: customersWithSubscription,
+    allcustomers: customersWithData,
     pagination,
   };
 };

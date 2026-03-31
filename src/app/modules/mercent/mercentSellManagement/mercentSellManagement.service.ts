@@ -545,6 +545,26 @@ const requestApproval = async ({
   const POINT_EARN_RATE = 10;    // 10 taka = 1 point
   const POINT_REDEEM_RATE = 10;  // 1 point = 10 taka
 
+
+
+// -----------------------------
+  // 🔹 Check if merchant has at least one active tier
+  // -----------------------------
+  const activeTierExists = await Tier.exists({
+    admin: merchantId,
+    isActive: true,
+  });
+
+  if (!activeTierExists) {
+    throw new Error(
+      "Merchant has no active tier. Please create a tier before processing sales."
+    );
+  }
+
+
+
+
+
   let digitalCard: any = null;
 
   // 🔹 Normalize promotionId to array
