@@ -142,7 +142,7 @@ const sendNotificationToAllUsers = async (
 
 
 const sendMerchantPromotion = async (payload: any, merchantId: string) => {
-  const { message, image, target, filters } = payload;
+  const { message, image, target, filters, mediaUrl } = payload;
 
   console.log("=================================================");
   console.log("🚀 sendMerchantPromotion START");
@@ -324,6 +324,7 @@ const sendMerchantPromotion = async (payload: any, merchantId: string) => {
       title: "Promotion",
       body: message,
       image,
+      mediaUrl,
     },
     data: {
       type: "promotion",

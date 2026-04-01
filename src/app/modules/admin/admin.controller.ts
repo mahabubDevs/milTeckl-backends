@@ -296,10 +296,37 @@ const updateMerchantApproveStatus = catchAsync(async (req, res) => {
 
 
 
+const getCustomerSellDetails = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  const result = await AdminService.getCustomerSellDetails(userId, req.query);
+
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Customer sell list retrieved successfully",
+    data: result.data,
+    pagination: result.pagination,
+  });
+});
 
 
+const getMerchantCustomerStats = catchAsync(async (req: Request, res: Response) => {
+  const { merchantId } = req.params;
 
+  const result = await AdminService.getMerchantCustomerStats(
+    merchantId,
+    req.query
+  );
 
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Merchant customer stats retrieved successfully",
+    data: result.data,
+    pagination: result.pagination,
+  });
+});
 
 
 
@@ -324,5 +351,9 @@ export const AdminController = {
   updateMerchantApproveStatus,
   exportMerchants,
 
-  getNearbyMerchantsController
+
+  getNearbyMerchantsController,
+
+  getCustomerSellDetails,
+  getMerchantCustomerStats
 };
