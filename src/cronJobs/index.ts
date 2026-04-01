@@ -3,6 +3,7 @@ import { logger } from "../shared/logger";
 import { updateMerchantVipCustomersJob } from "./vipCustomer";
 import { downgradeInactiveTiers } from "./updateMerchantVipCustomersJob";
 import { cleanupExpiredSells } from "./cleanupExpiredSells";
+import { expireSubscriptionsJob } from "./expairdSubscripon";
  // তোমার cron logic function
 
 export const startCronJobs = () => {
@@ -19,7 +20,7 @@ export const startCronJobs = () => {
     });
 
     // 🔹 Tier Downgrade → রাত ২টা
-    cron.schedule("52 13 * * *", async () => {
+    cron.schedule("0 2 * * *", async () => {
       try {
         logger.info("[CRON] Tier downgrade job started");
         await downgradeInactiveTiers();
@@ -28,7 +29,16 @@ export const startCronJobs = () => {
         logger.error("[CRON] Tier downgrade job failed", error);
       }
     });
-
+// 🔹 Subscription Expire Check → প্রতি রাত ৩টা
+    cron.schedule("45 14 * * *", async () => {
+      try {
+        logger.info("[CRON] Subscription expire job started");
+        await expireSubscriptionsJob();
+        logger.info("[CRON] Subscription expire job finished");
+      } catch (error) {
+        logger.error("[CRON] Subscription expire job failed", error);
+      }
+    });
      // 🔹 Pending Sell Cleanup → প্রতি মিনিটে
     // cron.schedule("* * * * *", async () => {
     //   logger.info("[CRON] Sell cleanup job running");

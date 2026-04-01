@@ -13,6 +13,7 @@ const pushSchema = new Schema(
     createdBy: { type: Types.ObjectId, ref: "User", required: true },
     sentCount: { type: Number, default: 0 },
     failedCount: { type: Number, default: 0 },
+    mediaUrl: { type: String },
   },
   { timestamps: true }
 );

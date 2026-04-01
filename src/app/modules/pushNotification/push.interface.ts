@@ -21,5 +21,6 @@ export interface IPushPayload {
   tier?: string;
   subscriptionType?: string;
   status?: string;
-  city?: string; // নতুন ফিল্ড
+  city?: string; 
+  mediaUrl?: string; 
 }

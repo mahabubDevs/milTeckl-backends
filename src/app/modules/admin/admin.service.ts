@@ -751,6 +751,151 @@ const exportCustomers = async (
 };
 
 
+const getCustomerSellDetails = async (
+  userId: string,
+  query: Record<string, unknown>
+) => {
+  console.log("📥 UserId:", userId);
+
+  // ===============================
+  // 🔥 Base Query
+  // ===============================
+  const baseQuery = Sell.find({
+    userId,
+    status: "completed",
+  }).populate("merchantId", "firstName businessName email");
+
+  // ===============================
+  // 🔥 Query Builder Apply
+  // ===============================
+  const sellQuery = new QueryBuilder(baseQuery, query)
+    .filter()
+    .sort()
+    .paginate();
+
+  const [sells, pagination] = await Promise.all([
+    sellQuery.modelQuery.lean<any[]>(),
+    sellQuery.getPaginationInfo(),
+  ]);
+
+  console.log("🧾 Total Sells (paginated):", sells.length);
+
+  // ===============================
+  // 🔥 Format Data
+  // ===============================
+  const formattedSells = sells.map((sell) => ({
+    sellId: sell._id,
+    merchant: sell.merchantId,
+    totalBill: sell.totalBill,
+    discountedBill: sell.discountedBill,
+    pointsEarned: sell.pointsEarned,
+    pointRedeemed: sell.pointRedeemed,
+    finalPoints:
+      (sell.pointsEarned || 0) - (sell.pointRedeemed || 0),
+    status: sell.status,
+    date: sell.createdAt,
+  }));
+
+  return {
+    data: formattedSells,
+    pagination,
+  };
+};
+
+
+
+const getMerchantCustomerStats = async (
+  merchantId: string,
+  query: Record<string, unknown>
+) => {
+  console.log("📥 MerchantId:", merchantId);
+
+  const limit = Number(query.limit) || 10;
+  const page = Number(query.page) || 1;
+  const skip = (page - 1) * limit;
+
+  // ===============================
+  // 🔥 Aggregation Pipeline
+  // ===============================
+  const pipeline: any[] = [
+    {
+      $match: {
+        merchantId: new Types.ObjectId(merchantId),
+        status: "completed",
+      },
+    },
+    {
+      $group: {
+        _id: "$userId",
+        totalSellAmount: { $sum: "$totalBill" },
+        totalEarnedPoints: { $sum: "$pointsEarned" },
+        totalRedeemedPoints: { $sum: "$pointRedeemed" },
+        totalTransactions: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "user",
+      },
+    },
+    { $unwind: "$user" },
+    {
+      $project: {
+        userId: "$_id",
+        customUserId: "$user.customUserId",
+        name: {
+        $concat: [
+          { $ifNull: ["$user.firstName", ""] },
+          " ",
+          { $ifNull: ["$user.lastName", ""] }
+        ]
+      },
+        email: "$user.email",
+        totalSellAmount: 1,
+        totalEarnedPoints: 1,
+        totalRedeemedPoints: 1,
+        totalTransactions: 1,
+      },
+    },
+    {
+      $sort: { totalSellAmount: -1 }, // top customers first
+    },
+    { $skip: skip },
+    { $limit: limit },
+  ];
+
+  const data = await Sell.aggregate(pipeline);
+
+  // ===============================
+  // 🔥 Total Count (for pagination)
+  // ===============================
+  const totalResult = await Sell.aggregate([
+    {
+      $match: {
+        merchantId: new Types.ObjectId(merchantId),
+        status: "completed",
+      },
+    },
+    { $group: { _id: "$userId" } },
+    { $count: "total" },
+  ]);
+
+  const total = totalResult[0]?.total || 0;
+
+  return {
+    data,
+    pagination: {
+      total,
+      limit,
+      page,
+      totalPage: Math.ceil(total / limit),
+    },
+  };
+};
+
 export const AdminService = {
   createAdminToDB,
   deleteAdminFromDB,
@@ -772,5 +917,7 @@ export const AdminService = {
 
   exportCustomers,
   exportMerchants,
-  getNearbyMerchants
+  getNearbyMerchants,
+  getCustomerSellDetails,
+  getMerchantCustomerStats
 };

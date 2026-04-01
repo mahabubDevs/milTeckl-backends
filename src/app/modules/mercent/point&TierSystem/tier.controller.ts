@@ -83,10 +83,22 @@ const createTier = catchAsync(async (req: Request, res: Response) => {
     );
   }
 
-// 🔹 pointsThreshold 0 হলে reward > 0 দিলে error
-if (validatedBody.pointsThreshold === 0 && validatedBody.reward && Number(validatedBody.reward) > 0) {
-  throw new ApiError(StatusCodes.BAD_REQUEST, "Reward cannot be more than 0 for pointsThreshold 0");
-}
+  // 🔥 Gold Basic validation
+  if (validatedBody.name === "Gold Basic") {
+    if (validatedBody.pointsThreshold !== 0) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Gold Basic tier must have pointsThreshold = 0"
+      );
+    }
+
+    if (Number(validatedBody.reward) !== 0) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Gold Basic tier must have reward = 0"
+      );
+    }
+  }
 
 
   const payload: Partial<ITier> = {
@@ -164,6 +176,20 @@ const updateTier = catchAsync(async (req: Request, res: Response) => {
   const validatedBody = await updateTierSchema.parseAsync(body);
   console.log("🟢 Validated Body:", validatedBody);
 
+  // 🔥 Gold Basic validation (UPDATE)
+  if (
+    validatedBody.name === "Gold Basic" &&
+    (
+      (validatedBody.pointsThreshold !== undefined && validatedBody.pointsThreshold !== 0) ||
+      (validatedBody.reward !== undefined && Number(validatedBody.reward) !== 0)
+    )
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Gold Basic must have pointsThreshold = 0 and reward = 0"
+    );
+  }
+
   // -----------------------------
   // 2️⃣ Prepare Payload with reward logic
   // -----------------------------
@@ -173,9 +199,17 @@ const updateTier = catchAsync(async (req: Request, res: Response) => {
   };
 
   // 🔹 pointsThreshold === 0 হলে reward > 0 দেওয়া যাবে না
-  if (validatedBody.pointsThreshold === 0 && validatedBody.reward && Number(validatedBody.reward) > 0) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "Reward cannot be more than 0 for pointsThreshold 0");
-  }
+  // 🔹 pointsThreshold === 0 হলে reward > 0 দেওয়া যাবে না
+    if (
+      validatedBody.pointsThreshold === 0 &&
+      validatedBody.reward !== undefined &&
+      Number(validatedBody.reward) > 0
+    ) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Reward cannot be more than 0 for pointsThreshold 0"
+      );
+    }
 
   // 🔹 reward ঠিক করা
   if (validatedBody.reward !== undefined) {

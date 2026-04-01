@@ -352,16 +352,35 @@ const checkout = async (
 
   let pointsEarned = parseFloat((eligibleAmount / POINT_EARN_RATE).toFixed(4));
 
- 
-  if (upcomingTier && (eligibleAmount / POINT_EARN_RATE + (digitalCard.lifeTimeEarnPoints || 0) >= upcomingTier.pointsThreshold)) {
-   
-    const additionalRewardPoints = Number(upcomingTier.reward) || 0;
+    // 🔥 NEW: total points after this transaction
+    const totalPointsAfterTxn =
+      (digitalCard.lifeTimeEarnPoints || 0) + pointsEarned;
 
-   
-    pointsEarned = parseFloat((pointsEarned + additionalRewardPoints).toFixed(4));
-  }
+    // 🔥 NEW: get all tiers
+    const allTiers = await Tier.find({
+      admin: merchantId,
+      isActive: true,
+    }).sort({ pointsThreshold: 1 });
 
-  console.log("🔹 Points Earned:", pointsEarned);
+    // 🔥 NEW: find highest achieved tier
+    let achievedTier = null;
+
+    for (const tier of allTiers) {
+      if (totalPointsAfterTxn >= tier.pointsThreshold) {
+        achievedTier = tier;
+      }
+    }
+
+    // 🔥 NEW: apply correct reward (only highest tier)
+    if (achievedTier) {
+      const additionalRewardPoints = Number(achievedTier.reward) || 0;
+
+      pointsEarned = parseFloat(
+        (pointsEarned + additionalRewardPoints).toFixed(4)
+      );
+    }
+
+    console.log("🔹 Points Earned:", pointsEarned);
  
 
 
