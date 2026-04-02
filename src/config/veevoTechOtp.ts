@@ -49,7 +49,7 @@ export const sendOtp = async (phone: string, otp: string) => {
     console.log("VeevoTech Response:", response.data);
 
     // 🔴 Important validation
-    if (response.data.STATUS !== "SUCCESS") {
+    if (response.data.STATUS !== "SUCCESSFUL") {
       throw new Error(
         `SMS Failed: ${response.data.ERROR_DESCRIPTION || "Unknown error"}`
       );
