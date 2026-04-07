@@ -8,20 +8,30 @@ import Stripe from "stripe";
 import { createSubscriptionProduct } from "../../../helpers/createSubscriptionProductHelper";
 
 const createPackageToDB = async (payload: Partial<IPackage>): Promise<IPackage> => {
+  console.log("📦 Incoming Payload:", payload);
+
   // ✅ Check existing package
   const existingPackage = await Package.findOne({
-    title: payload.title,
+    duration: payload.duration,
     admin: payload.admin,
     status: "Active",
   });
-  if (existingPackage) return existingPackage;
+
+  console.log("🔍 Existing Package Check Result:", existingPackage);
+
+  if (existingPackage) {
+    console.log("⚠️ Package already exists, returning existing one");
+    return existingPackage;
+  }
 
   // 🔹 If price is 0, mark as free plan
   if (payload.price === 0) {
     payload.isFreeTrial = true;
+    console.log("🎁 Marked as Free Trial Package");
   }
 
   // ✅ Create Stripe Product + Price
+  console.log("🚀 Creating Stripe Product...");
   const product = await createSubscriptionProduct({
     title: payload.title!,
     description: payload.description!,
@@ -29,15 +39,22 @@ const createPackageToDB = async (payload: Partial<IPackage>): Promise<IPackage> 
     price: payload.price!,
   });
 
+  console.log("💳 Stripe Product Created:", product);
+
   // Assign only available fields
   payload.productId = product.productId;
   payload.priceId = product.priceId;
 
+  console.log("📝 Final Payload Before DB Save:", payload);
+
   // Save to DB
   const result = await Package.create(payload as IPackage);
 
+  console.log("✅ Package Saved to DB:", result);
+
   // Optionally: delete Stripe product if DB save fails
   if (!result) {
+    console.log("❌ DB Save Failed, deleting Stripe product...");
     await stripe.products.del(product.productId);
   }
 
@@ -52,6 +69,19 @@ const updatePackageToDB = async (id: string, payload: Partial<IPackage>): Promis
 
     const existingPackage = await Package.findById(id);
     if (!existingPackage) throw new ApiError(StatusCodes.BAD_REQUEST, "Package not found");
+
+    if (payload.duration) {
+    const duplicate = await Package.findOne({
+        duration: payload.duration,
+        admin: existingPackage.admin,
+        status: "Active",
+        _id: { $ne: id }, 
+    });
+
+    if (duplicate) {
+        throw new ApiError(400, `Package already exists for ${payload.duration}`);
+    }
+    }
 
     // Update Stripe product
     if (payload.title || payload.description) {
