@@ -31,7 +31,7 @@ export const startCronJobs = () => {
       }
     });
 // 🔹 Subscription Expire Check → প্রতি রাত ৩টা
-    cron.schedule("39 14 * * *", async () => {
+    cron.schedule("13 14 * * *", async () => {
       try {
         logger.info("[CRON] Subscription expire job started");
         await expireSubscriptionsJob();
@@ -43,7 +43,7 @@ export const startCronJobs = () => {
 
 
     // 🔹 Subscription Expire & Reminder → রাত ৩টা
-    cron.schedule("39 16 * * *", async () => {
+    cron.schedule("20 14 * * *", async () => {
       try {
         logger.info("[CRON] Subscription expire job started");
         await expireReminderSubscriptionsJob(); // এখানে reminder logic থাকবে
