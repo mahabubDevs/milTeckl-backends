@@ -457,19 +457,19 @@ const getCustomerChartWeek = async (
   startDate: string,
   endDate: string
 ) => {
-
-  const from = new Date(`${startDate}T00:00:00Z`);
-  const to = new Date(`${endDate}T23:59:59Z`);
-
   if (!startDate || !endDate) {
     throw new Error("Start date and end date are required");
   }
+
+  const from = new Date(`${startDate}T00:00:00Z`);
+  const to = new Date(`${endDate}T23:59:59Z`);
 
   const pipeline = [
     {
       $match: {
         merchantId: new Types.ObjectId(merchantId),
         createdAt: { $gte: from, $lte: to },
+        status: "completed", // optional if you only want completed orders
       },
     },
     {
@@ -480,6 +480,7 @@ const getCustomerChartWeek = async (
           day: { $dayOfMonth: "$createdAt" },
         },
         totalRevenue: { $sum: "$discountedBill" },
+        totalDiscount: { $sum: { $subtract: ["$totalBill", "$discountedBill"] } },
       },
     },
     {
@@ -493,7 +494,7 @@ const getCustomerChartWeek = async (
 
   const data = await Sell.aggregate(pipeline);
 
-  const days: { date: string; revenue: number }[] = [];
+  const days: { date: string; revenue: number; discount: number }[] = [];
   const current = new Date(from);
 
   while (current <= to) {
@@ -511,6 +512,7 @@ const getCustomerChartWeek = async (
     days.push({
       date: current.toISOString().slice(0, 10),
       revenue: found?.totalRevenue || 0,
+      discount: found?.totalDiscount || 0,
     });
 
     current.setUTCDate(current.getUTCDate() + 1);
@@ -518,7 +520,6 @@ const getCustomerChartWeek = async (
 
   return days;
 };
-
 
 
 
