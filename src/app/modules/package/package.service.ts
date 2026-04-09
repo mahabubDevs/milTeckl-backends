@@ -21,7 +21,7 @@ const createPackageToDB = async (payload: Partial<IPackage>): Promise<IPackage> 
 
   if (existingPackage) {
     console.log("⚠️ Package already exists, returning existing one");
-    return existingPackage;
+    throw new Error("Package already exists");
   }
 
   // 🔹 If price is 0, mark as free plan
