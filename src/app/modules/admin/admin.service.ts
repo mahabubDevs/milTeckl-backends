@@ -177,11 +177,11 @@ const getAllCustomers = async (query: Record<string, unknown>) => {
 
   // 1️⃣ Fetch base users (same as your getAllCustomers)
   const baseQuery = User.find({ role: "USER" }).select(
-    "customUserId firstName lastName phone email status address referredInfo.referredBy subscription"
+    "customUserId firstName lastName phone email status address referredInfo.referredBy subscription profile"
   );
 
   const allCustomersQuery = new QueryBuilder(baseQuery, query)
-    .search(["firstName", "lastName", "email", "phone", "customUserId", "address"])
+    .search(["firstName", "lastName", "email", "phone", "customUserId", "address", ])
     .filter()
     .paginate()
     .sort();

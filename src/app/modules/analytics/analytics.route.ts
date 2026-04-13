@@ -9,7 +9,7 @@ const router = express.Router();
 
 router.get(
   "/business-customer",
-  auth(),canAccessMerchantProfile,
+  auth(),
   AnalyticsController.getBusinessCustomerAnalytics
 );
 
