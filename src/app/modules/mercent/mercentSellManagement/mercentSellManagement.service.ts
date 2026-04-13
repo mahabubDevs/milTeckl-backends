@@ -1186,6 +1186,7 @@ interface ITransactionPagination {
 
 const getUserFullTransactions = async (
   userId: string,
+  merchantId: string,
   type: "all" | "earn" | "use" = "all",
   page = 1,
   limit = 20
@@ -1194,12 +1195,18 @@ const getUserFullTransactions = async (
     throw new Error("Invalid user ID");
   }
 
+  if (!Types.ObjectId.isValid(merchantId)) {
+    throw new Error("Invalid merchant ID");
+  }
+
   const skip = (page - 1) * limit;
 
   const query: any = {
-     userId: new Types.ObjectId(userId),
-      status: "completed"
-   };
+    userId: new Types.ObjectId(userId),
+    merchantId: new Types.ObjectId(merchantId), // 🔥 main fix
+    status: "completed",
+  };
+
   if (type === "earn") query.pointsEarned = { $gt: 0 };
   if (type === "use") query.pointRedeemed = { $gt: 0 };
 
@@ -1215,14 +1222,15 @@ const getUserFullTransactions = async (
       .lean(),
   ]);
 
-  const pagination: ITransactionPagination = {
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
+  return {
+    transactions,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
   };
-
-  return { transactions, pagination };
 };
 
 // -----------------------------

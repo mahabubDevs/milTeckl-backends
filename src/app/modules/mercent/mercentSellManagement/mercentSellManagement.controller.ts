@@ -12,6 +12,7 @@ import QueryBuilder from "../../../../util/queryBuilder";
 import { Rating } from "../../customer/rating/rating.model";
 import moment from "moment";
 import ExcelJ from "exceljs";
+import { Tier } from "../point&TierSystem/tier.model";
 
 // 🔹 Demo data fallback
 
@@ -249,21 +250,29 @@ const getPointsHistory = catchAsync(async (req: Request, res: Response) => {
 
 const getUserFullTransactions = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
+
+  // 🔥 merchantId from token
+  const merchantId = (req.user as any)._id;
+
   const type = (req.query.type as "all" | "earn" | "use") || "all";
   const page = parseInt((req.query.page as string) || "1");
   const limit = parseInt((req.query.limit as string) || "20");
 
-  const result = await SellService.getUserFullTransactions(userId, type, page, limit);
+  const result = await SellService.getUserFullTransactions(
+    userId,
+    merchantId,
+    type,
+    page,
+    limit
+  );
 
   sendResponse(res, {
     statusCode: StatusCodes.OK,
     success: true,
     message: "User transactions fetched successfully",
     data: result.transactions,
-    // pagination: result.pagination,
   });
 });
-
 
 
 const getMerchantSales = async (req: Request, res: Response) => {
@@ -821,7 +830,9 @@ const exportMerchantCustomersExcel = catchAsync(
     const merchant = req.user as { _id: string };
 
     if (!merchant?._id || !Types.ObjectId.isValid(merchant._id)) {
-      return res.status(401).json({ success: false, message: "Unauthorized merchant" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized merchant" });
     }
 
     const merchantId = merchant._id;
@@ -843,19 +854,41 @@ const exportMerchantCustomersExcel = catchAsync(
       dateFilter = { createdAt: { $gte: startOfMonth } };
     }
 
-    const query = Sell.find({ merchantId, status: "completed", ...dateFilter });
+    const query = Sell.find({
+      merchantId,
+      status: "completed",
+      ...dateFilter,
+    });
 
     const qb = new QueryBuilder(query, req.query)
       .filter()
       .search(["userId.firstName", "userId.lastName"])
       .sort()
       .populate(["userId", "digitalCardId", "merchantId"], {
-        userId: "firstName lastName email phone profile customUserId country",
-        digitalCardId: "cardCode availablePoints tier createdAt",
+        userId:
+          "firstName lastName email phone profile customUserId country",
+        digitalCardId: "cardCode availablePoints createdAt",
         merchantId: "businessName shopName firstName",
       });
 
     const sales = await qb.modelQuery.lean();
+
+    // =========================
+    // 🔥 Tier Fix (NEW PART)
+    // =========================
+    const tiers = await Tier.find({ isActive: true })
+      .sort({ pointsThreshold: 1 })
+      .lean();
+
+    const getCurrentTier = (points: number) => {
+      let currentTier = "";
+      for (const tier of tiers) {
+        if (points >= tier.pointsThreshold) {
+          currentTier = tier.name;
+        }
+      }
+      return currentTier;
+    };
 
     const userIds = [
       ...new Set(
@@ -863,7 +896,10 @@ const exportMerchantCustomersExcel = catchAsync(
       ),
     ];
 
-    const ratings = await Rating.find({ merchantId, userId: { $in: userIds } })
+    const ratings = await Rating.find({
+      merchantId,
+      userId: { $in: userIds },
+    })
       .select("userId rating comment")
       .lean();
 
@@ -873,15 +909,17 @@ const exportMerchantCustomersExcel = catchAsync(
     });
 
     const userMap: Record<string, any> = {};
+
     sales.forEach((tx: any) => {
       const user = tx.userId;
       if (!user?._id) return;
 
       const userId = user._id.toString();
 
+      const availablePoints = tx.digitalCardId?.availablePoints || 0;
+
       if (!userMap[userId]) {
         userMap[userId] = {
-          // UserID: userId,
           Name: `${user.firstName} ${user.lastName || ""}`.trim(),
           Email: user.email,
           Phone: user.phone,
@@ -892,8 +930,11 @@ const exportMerchantCustomersExcel = catchAsync(
           TotalPointsRedeemed: 0,
           TotalBilled: 0,
           FinalBilled: 0,
-          AvailablePoints: tx.digitalCardId?.availablePoints || 0,
-          Tier: tx.digitalCardId?.tier || "",
+          AvailablePoints: availablePoints,
+
+          // 🔥 FIXED TIER
+          Tier: getCurrentTier(availablePoints),
+
           CreatedAt: tx.digitalCardId?.createdAt || null,
           SalesRep:
             tx.merchantId?.businessName ||
@@ -914,16 +955,16 @@ const exportMerchantCustomersExcel = catchAsync(
 
     const customers = Object.values(userMap);
 
-    // ===== Excel Workbook =====
+    // =========================
+    // Excel Workbook
+    // =========================
     const workbook = new ExcelJ.Workbook();
     workbook.creator = "Your Company Name";
     workbook.created = new Date();
 
-    // ===== Single Sheet: Customers + Summary =====
     const sheet = workbook.addWorksheet("Customers");
 
     sheet.columns = [
-      // { header: "User ID", key: "UserID", width: 28 },
       { header: "Name", key: "Name", width: 25 },
       { header: "Email", key: "Email", width: 30 },
       { header: "Phone", key: "Phone", width: 18 },
@@ -945,7 +986,9 @@ const exportMerchantCustomersExcel = catchAsync(
     customers.forEach((c) => {
       sheet.addRow({
         ...c,
-        CreatedAt: c.CreatedAt ? new Date(c.CreatedAt).toLocaleString() : "",
+        CreatedAt: c.CreatedAt
+          ? new Date(c.CreatedAt).toLocaleString()
+          : "",
       });
     });
 
@@ -962,6 +1005,7 @@ const exportMerchantCustomersExcel = catchAsync(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+
     res.send(buffer);
   }
 );
