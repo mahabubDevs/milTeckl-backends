@@ -1127,7 +1127,7 @@ const getCustomerAnalytics = async (
         pointsRedeemed: { $sum: "$pointRedeemed" },
         totalRevenue: { $sum: "$totalBill" },
 
-        visits: { $addToSet: "$merchantId" },
+        visits: { $sum: 1 },
       },
     },
 
@@ -1145,7 +1145,7 @@ const getCustomerAnalytics = async (
         pointsRedeemed: hideSensitive ? 0 : 1,
         totalRevenue: 1,
 
-        visit: { $size: "$visits" },
+        visit: "$visits",
       },
     },
 
@@ -1249,7 +1249,7 @@ const getCustomerAnalytics = async (
         totalRevenue: { $sum: "$totalBill" },
         pointsEarned: { $sum: "$pointsEarned" },
         pointsRedeemed: { $sum: "$pointRedeemed" },
-        users: { $addToSet: "$userId" },
+        users: { $sum: 1 },
       },
     },
 
@@ -1265,7 +1265,7 @@ const getCustomerAnalytics = async (
         totalRevenue: 1,
         pointsEarned: 1,
         pointsRedeemed: hideSensitive ? 0 : 1,
-        users: { $size: "$users" },
+        users: 1,
       },
     },
   ];
@@ -1668,71 +1668,31 @@ const getMerchantAnalyticsMonthly = async (
   page: number = 1,
   limit: number = 10,
   filters?: AnalyticsFilters,
-  userRole: string = "SUPER_ADMIN"
+  userRole: string = "SUPER_ADMIN",
+  merchantId?: string // ✅ FIXED
 ) => {
   const hideSensitive = userRole === "VIEW_ADMIN";
 
-  // ✅ Date range
+  // ---------------- Date Range ----------------
   const start = startDate ? new Date(startDate) : new Date("2000-01-01");
   const end = endDate ? new Date(endDate) : new Date();
 
   start.setHours(0, 0, 0, 0);
   end.setHours(23, 59, 59, 999);
 
-  // ✅ Merchant filter (same as records logic)
-  const merchantMatch: Record<string, any> = {
-    role: "MERCENT",
-  };
-
-  if (filters?.paymentStatus) {
-    merchantMatch.paymentStatus = filters.paymentStatus;
+  if (!merchantId) {
+    throw new Error("Merchant ID missing from token");
   }
 
-  if (filters?.city) {
-    merchantMatch.city = { $regex: filters.city, $options: "i" };
-  }
+  const merchantObjectId = new mongoose.Types.ObjectId(merchantId);
 
-  if (filters?.customerName) {
-    merchantMatch.firstName = {
-      $regex: filters.customerName,
-      $options: "i",
-    };
-  }
-
-  if (filters?.location) {
-    merchantMatch.address = {
-      $regex: filters.location,
-      $options: "i",
-    };
-  }
-
-  if (filters?.subscriptionStatus) {
-    merchantMatch.subscription = filters.subscriptionStatus;
-  }
-
-  // ✅ STEP 1: Get merchantIds based on filter
-  const merchants = await User.find(merchantMatch)
-    .select("_id")
-    .lean<{ _id: any }[]>();
-
-  const merchantIds = merchants.map((m) => m._id);
-
-  // ❗ No merchant → early return
-  if (!merchantIds.length) {
-    return {
-      pagination: { page, limit, total: 0, totalPage: 1 },
-      data: { monthlyData: [] },
-    };
-  }
-
-  // ✅ STEP 2: Monthly aggregation from Sell
+  // ---------------- MONTHLY AGGREGATION ----------------
   const monthlyRaw = await Sell.aggregate([
     {
       $match: {
-        merchantId: { $in: merchantIds },
-        createdAt: { $gte: start, $lte: end },
+        merchantId: merchantObjectId,
         status: "completed",
-         
+        createdAt: { $gte: start, $lte: end },
       },
     },
 
@@ -1743,10 +1703,12 @@ const getMerchantAnalyticsMonthly = async (
           month: { $month: "$createdAt" },
         },
 
-        totalRevenue: { $sum: "$totalBill" },
-        pointsRedeemed: { $sum: "$pointRedeemed" },
-        pointsEarned: { $sum: "$pointsEarned" },
-        users: { $addToSet: "$userId" },
+        // ✅ SAME AS FIRST API
+        totalRevenue: { $sum: "$discountedBill" },
+        totalPointsAccumulated: { $sum: "$pointsEarned" },
+        totalPointsRedeemed: { $sum: "$pointRedeemed" },
+
+        totalUsers: { $sum: 1 },
       },
     },
 
@@ -1760,19 +1722,20 @@ const getMerchantAnalyticsMonthly = async (
         },
 
         totalRevenue: 1,
-        pointsEarned: 1,
-        pointsRedeemed: hideSensitive
-          ? { $literal: 0 }
-          : "$pointsRedeemed",
+        totalPointsAccumulated: 1,
 
-        usersCount: { $size: "$users" },
+        totalPointsRedeemed: hideSensitive
+          ? { $literal: 0 }
+          : "$totalPointsRedeemed",
+
+        totalUsers: 1,
       },
     },
 
     { $sort: { year: 1, month: 1 } },
   ]);
 
-  // ✅ STEP 3: Fill missing months
+  // ---------------- FILL MISSING MONTHS ----------------
   const monthMap = new Map(
     monthlyRaw.map((m) => [`${m.year}-${m.month}`, m])
   );
@@ -1794,21 +1757,18 @@ const getMerchantAnalyticsMonthly = async (
       monthName: monthNames[month - 1],
 
       totalRevenue: found?.totalRevenue ?? 0,
-      pointsEarned: found?.pointsEarned ?? 0,
+      totalPointsAccumulated: found?.totalPointsAccumulated ?? 0,
 
-      pointsRedeemed: found
-        ? hideSensitive
-          ? 0
-          : found.pointsRedeemed
-        : 0,
+      totalPointsRedeemed: hideSensitive
+        ? 0
+        : found?.totalPointsRedeemed ?? 0,
 
-      usersCount: found?.usersCount ?? 0,
+      totalUsers: found?.totalUsers ?? 0,
     });
 
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
-  // ❗ Pagination not really needed, but keeping structure
   return {
     pagination: {
       page,

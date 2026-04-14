@@ -37,7 +37,7 @@ router.get(
 
 router.get(
   "/merchant/monthly/export",
-  // auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN),
+  auth(),
   AnalyticsController.exportMerchantMonthlyAnalytics
 );
 

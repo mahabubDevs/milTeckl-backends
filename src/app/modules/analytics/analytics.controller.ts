@@ -485,21 +485,36 @@ const exportMerchantMonthlyAnalytics = catchAsync(
   async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
 
+    const user = req.user as any;
+    const role = user.role;
+    const merchantId = user._id; // ✅ FIX: real merchant id from token
+
     console.log("🚀 Monthly export request:", { startDate, endDate });
 
     // ---------------- Fetch monthlyData ----------------
     const result = await AnalyticsService.getMerchantAnalyticsMonthly(
       startDate as string,
       endDate as string,
-      1, // page ignored
-      0, // limit 0 = fetch all
-      {} // no filters needed, full monthly data
+      1,
+      0,
+      {},
+      role,
+      merchantId // ✅ FIXED
     );
 
     const monthlyData = result.data.monthlyData;
 
     console.log("🔹 Monthly records count:", monthlyData.length);
-    console.log("🔸 Sample records:", monthlyData.slice(0, 5));
+
+    // ---------------- Normalize for Excel ----------------
+    const normalizedData = monthlyData.map((item: any) => ({
+      year: item.year,
+      monthName: item.monthName,
+      totalRevenue: item.totalRevenue ?? 0,
+      pointsRedeemed: item.totalPointsRedeemed ?? 0,
+      accumulationPoints: item.totalPointsAccumulated ?? 0,
+      usersCount: item.totalUsers ?? 0,
+    }));
 
     // ---------------- Excel Columns ----------------
     const columns = [
@@ -507,22 +522,21 @@ const exportMerchantMonthlyAnalytics = catchAsync(
       { header: "Month", key: "monthName" },
       { header: "Total Revenue", key: "totalRevenue" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
+      { header: "Accumulation Points", key: "accumulationPoints" },
       { header: "Users Count", key: "usersCount" },
     ];
 
-    // ---------------- Generate Excel ----------------
     const buffer = await generateExcelBuffer({
       sheetName: "Monthly Analytics",
       columns,
-      rows: monthlyData,
+      rows: normalizedData,
     });
-
-    console.log("✅ Excel buffer generated, size:", buffer.length, "bytes");
 
     res.setHeader(
       "Content-Disposition",
       `attachment; filename=merchant-monthly-analytics.xlsx`
     );
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
