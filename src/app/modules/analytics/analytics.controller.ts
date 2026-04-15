@@ -449,7 +449,7 @@ const exportMerchantAnalytics = catchAsync(
       { header: "Email", key: "email" },
       { header: "Phone", key: "phone" },
       { header: "Location", key: "location" },
-      { header: "Subscription Status", key: "subscriptionStatus" },
+      { header: "Membership Status", key: "subscriptionStatus" },
       { header: "Payment Status", key: "paymentStatus" },
       { header: "Points Accumulated", key: "pointsAccumulated" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
@@ -487,54 +487,57 @@ const exportMerchantMonthlyAnalytics = catchAsync(
 
     const user = req.user as any;
     const role = user.role;
-    const merchantId = user._id; // ✅ FIX: real merchant id from token
+    const merchantId = user._id;
 
-    console.log("🚀 Monthly export request:", { startDate, endDate });
+    console.log("🚀 [MONTHLY EXPORT] Request received:", {
+      startDate,
+      endDate,
+      role,
+      merchantId,
+    });
 
-    // ---------------- Fetch monthlyData ----------------
-    const result = await AnalyticsService.getMerchantAnalyticsMonthly(
+    const result = await AnalyticsService.getMerchantAnalytics(
       startDate as string,
       endDate as string,
       1,
       0,
       {},
-      role,
-      merchantId // ✅ FIXED
+      role
     );
 
-    const monthlyData = result.data.monthlyData;
+    const monthlyData = result?.data?.monthlyData || [];
 
-    console.log("🔹 Monthly records count:", monthlyData.length);
+    console.log("📦 [MONTHLY EXPORT] Data count:", monthlyData.length);
 
-    // ---------------- Normalize for Excel ----------------
-    const normalizedData = monthlyData.map((item: any) => ({
+    const rows = monthlyData.map((item: any) => ({
       year: item.year,
+      // month: item.month,
       monthName: item.monthName,
-      totalRevenue: item.totalRevenue ?? 0,
-      pointsRedeemed: item.totalPointsRedeemed ?? 0,
-      accumulationPoints: item.totalPointsAccumulated ?? 0,
-      usersCount: item.totalUsers ?? 0,
+      totalRevenue: Number(item.totalRevenue ?? 0),
+      pointsEarned: Number(item.pointsEarned ?? 0),
+      pointsRedeemed: Number(item.pointsRedeemed ?? 0),
+      users: Number(item.users ?? 0),
     }));
 
-    // ---------------- Excel Columns ----------------
     const columns = [
       { header: "Year", key: "year" },
-      { header: "Month", key: "monthName" },
+      // { header: "Month", key: "month" },
+      { header: "Month Name", key: "monthName" },
       { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Points Earned", key: "pointsEarned" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Accumulation Points", key: "accumulationPoints" },
-      { header: "Users Count", key: "usersCount" },
+      { header: "Visits", key: "users" },
     ];
 
     const buffer = await generateExcelBuffer({
-      sheetName: "Monthly Analytics",
+      sheetName: "Monthly Report",
       columns,
-      rows: normalizedData,
+      rows,
     });
 
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=merchant-monthly-analytics.xlsx`
+      `attachment; filename=merchant-monthly-report.xlsx`
     );
 
     res.setHeader(
@@ -542,10 +545,9 @@ const exportMerchantMonthlyAnalytics = catchAsync(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
 
-    res.send(buffer);
+    return res.send(buffer);
   }
 );
-
 
 
 
@@ -575,7 +577,7 @@ const exportCustomerMonthlyData = catchAsync(
       { header: "Total Revenue", key: "totalRevenue" },
       { header: "Points Earned", key: "pointsEarned" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Users Count", key: "users" },
+      { header: "Visits ", key: "users" },
     ];
 
     // -------- Generate Excel --------
