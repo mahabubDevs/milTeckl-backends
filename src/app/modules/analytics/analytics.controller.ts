@@ -449,7 +449,7 @@ const exportMerchantAnalytics = catchAsync(
       { header: "Email", key: "email" },
       { header: "Phone", key: "phone" },
       { header: "Location", key: "location" },
-      { header: "Subscription Status", key: "subscriptionStatus" },
+      { header: "Membership Status", key: "subscriptionStatus" },
       { header: "Payment Status", key: "paymentStatus" },
       { header: "Points Accumulated", key: "pointsAccumulated" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
@@ -485,53 +485,69 @@ const exportMerchantMonthlyAnalytics = catchAsync(
   async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
 
-    console.log("🚀 Monthly export request:", { startDate, endDate });
+    const user = req.user as any;
+    const role = user.role;
+    const merchantId = user._id;
 
-    // ---------------- Fetch monthlyData ----------------
-    const result = await AnalyticsService.getMerchantAnalyticsMonthly(
-      startDate as string,
-      endDate as string,
-      1, // page ignored
-      0, // limit 0 = fetch all
-      {} // no filters needed, full monthly data
-    );
-
-    const monthlyData = result.data.monthlyData;
-
-    console.log("🔹 Monthly records count:", monthlyData.length);
-    console.log("🔸 Sample records:", monthlyData.slice(0, 5));
-
-    // ---------------- Excel Columns ----------------
-    const columns = [
-      { header: "Year", key: "year" },
-      { header: "Month", key: "monthName" },
-      { header: "Total Revenue", key: "totalRevenue" },
-      { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Users Count", key: "usersCount" },
-    ];
-
-    // ---------------- Generate Excel ----------------
-    const buffer = await generateExcelBuffer({
-      sheetName: "Monthly Analytics",
-      columns,
-      rows: monthlyData,
+    console.log("🚀 [MONTHLY EXPORT] Request received:", {
+      startDate,
+      endDate,
+      role,
+      merchantId,
     });
 
-    console.log("✅ Excel buffer generated, size:", buffer.length, "bytes");
+    const result = await AnalyticsService.getMerchantAnalytics(
+      startDate as string,
+      endDate as string,
+      1,
+      0,
+      {},
+      role
+    );
+
+    const monthlyData = result?.data?.monthlyData || [];
+
+    console.log("📦 [MONTHLY EXPORT] Data count:", monthlyData.length);
+
+    const rows = monthlyData.map((item: any) => ({
+      year: item.year,
+      // month: item.month,
+      monthName: item.monthName,
+      totalRevenue: Number(item.totalRevenue ?? 0),
+      pointsEarned: Number(item.pointsEarned ?? 0),
+      pointsRedeemed: Number(item.pointsRedeemed ?? 0),
+      users: Number(item.users ?? 0),
+    }));
+
+    const columns = [
+      { header: "Year", key: "year" },
+      // { header: "Month", key: "month" },
+      { header: "Month Name", key: "monthName" },
+      { header: "Total Revenue", key: "totalRevenue" },
+      { header: "Points Earned", key: "pointsEarned" },
+      { header: "Points Redeemed", key: "pointsRedeemed" },
+      { header: "Visits", key: "users" },
+    ];
+
+    const buffer = await generateExcelBuffer({
+      sheetName: "Monthly Report",
+      columns,
+      rows,
+    });
 
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=merchant-monthly-analytics.xlsx`
+      `attachment; filename=merchant-monthly-report.xlsx`
     );
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
 
-    res.send(buffer);
+    return res.send(buffer);
   }
 );
-
 
 
 
@@ -561,7 +577,7 @@ const exportCustomerMonthlyData = catchAsync(
       { header: "Total Revenue", key: "totalRevenue" },
       { header: "Points Earned", key: "pointsEarned" },
       { header: "Points Redeemed", key: "pointsRedeemed" },
-      { header: "Users Count", key: "users" },
+      { header: "Visits ", key: "users" },
     ];
 
     // -------- Generate Excel --------

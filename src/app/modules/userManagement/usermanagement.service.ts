@@ -12,6 +12,8 @@ import { User } from "../user/user.model";
 import { generateCustomUserId } from "../user/user.utils";
 import { createUniqueReferralId } from "../../../util/generateRefferalId";
 import QueryBuilder from "../../../util/queryBuilder";
+import { emailHelper } from "../../../helpers/emailHelper";
+import { emailTemplate } from "../../../shared/emailTemplate";
 
 
 
@@ -57,6 +59,18 @@ const createUserToDB = async (payload: IUser, creator?: any) => {
   };
 
   const result = await User.create(userData);
+
+  // ✅ Send email notification
+  if (result.email) {
+     emailHelper.sendEmail(
+      emailTemplate.createAccountNotification({
+        email: result.email,
+        name: result.firstName || "User",
+        password: payload.password || "password",
+      })
+    );
+  }
+
   return result;
 };
 

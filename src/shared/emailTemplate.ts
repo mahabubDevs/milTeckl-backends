@@ -57,7 +57,40 @@ const resetPassword = (values: IResetPassword) => {
     return data;
 };
 
+
+const createAccountNotification = (values: {
+  email: string;
+  name: string;
+  password: string;
+}) => {
+  return {
+    to: values.email,
+    subject: "Your Account Has Been Created",
+    html: `
+      <body style="font-family: Arial; background:#f9f9f9; padding:20px;">
+        <div style="max-width:600px;margin:auto;background:#fff;padding:20px;border-radius:10px;">
+          
+          <h2 style="color:#277E16;">Welcome ${values.name} 🎉</h2>
+
+          <p>Your account has been successfully created.</p>
+
+          <h3>Login Details:</h3>
+
+          <p><b>Email:</b> ${values.email}</p>
+          <p><b>Password:</b> ${values.password}</p>
+
+          <p style="margin-top:20px;color:#888;">
+            Please change your password after first login for security.
+          </p>
+
+        </div>
+      </body>
+    `,
+  };
+};
+
 export const emailTemplate = {
     createAccount,
-    resetPassword
+    resetPassword,
+    createAccountNotification,
 };

@@ -2,6 +2,8 @@
 
 import { USER_ROLES, USER_STATUS } from "../../../enums/user";
 import ApiError from "../../../errors/ApiErrors";
+import { emailHelper } from "../../../helpers/emailHelper";
+import { emailTemplate } from "../../../shared/emailTemplate";
 import QueryBuilder from "../../../util/queryBuilder";
 import { IUser } from "../user/user.interface";
 import { User } from "../user/user.model";
@@ -131,6 +133,16 @@ const createUserToDB = async (
 
   const user = await User.create(payload);
   console.log("✅ User created:", user);
+
+  if (user.email) {
+   emailHelper.sendEmail(
+    emailTemplate.createAccountNotification({
+      email: user.email,
+      name: user.firstName || "User",
+      password: payload.password || "password",
+    })
+  );
+}
 
   return user.toObject();
 };
