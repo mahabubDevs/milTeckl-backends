@@ -1100,6 +1100,7 @@ const getPointsHistory = async (
 
   const query: any = {
     digitalCardId: new Types.ObjectId(digitalCardId),
+    status: "completed",
   };
 
   if (typeSanitized === "earn") query.pointsEarned = { $gt: 0 };
